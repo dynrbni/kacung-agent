@@ -47,7 +47,7 @@ describe('KacungAgentApp Server', () => {
   it('responds to GET /health', async () => {
     const res = await fetch(`http://127.0.0.1:${testPort}/health`);
     expect(res.status).toBe(200);
-    const data = await res.json();
+    const data = (await res.json()) as { status: string; assistant: string };
     expect(data.status).toBe('ok');
     expect(data.assistant).toBe('Kacung');
   });
@@ -55,7 +55,10 @@ describe('KacungAgentApp Server', () => {
   it('responds to GET /config with safe assistant info', async () => {
     const res = await fetch(`http://127.0.0.1:${testPort}/config`);
     expect(res.status).toBe(200);
-    const data = await res.json();
+    const data = (await res.json()) as {
+      assistant: { name: string; wakePhrase: string };
+      tools: unknown[];
+    };
     expect(data.assistant.name).toBe('Kacung');
     expect(data.assistant.wakePhrase).toBe('Woi Kacung');
     expect(data.tools.length).toBeGreaterThanOrEqual(15);
@@ -69,7 +72,7 @@ describe('KacungAgentApp Server', () => {
     });
 
     expect(res.status).toBe(200);
-    const data = await res.json();
+    const data = (await res.json()) as { completed: boolean; text: string };
     expect(data.completed).toBe(true);
     expect(data.text).toContain('Sekarang jam');
   });
