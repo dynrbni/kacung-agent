@@ -356,7 +356,50 @@ export class KacungAgentApp {
       return;
     }
 
-    // 7. POST /reset
+    // 7. POST /audio (Audio buffer transcription & execution)
+    if (req.method === 'POST' && pathname === '/audio') {
+      try {
+        const chunks: Buffer[] = [];
+        req.on('data', (c) => chunks.push(c));
+        await new Promise((resolve) => req.on('end', resolve));
+        const audioBuffer = Buffer.concat(chunks);
+        this.logger.info(`Received audio recording for transcription (${audioBuffer.length} bytes)`);
+
+        let transcript = '';
+        if (this.config.stt.groqApiKey) {
+          try {
+            const form = new FormData();
+            const blob = new Blob([audioBuffer], { type: 'audio/wav' });
+            form.append('file', blob, 'audio.wav');
+            form.append('model', 'whisper-large-v3-turbo');
+            const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${this.config.stt.groqApiKey}` },
+              body: form,
+            });
+            if (groqRes.ok) {
+              const groqData = (await groqRes.json()) as { text: string };
+              transcript = groqData.text;
+            }
+          } catch (e) {
+            this.logger.warn(`Groq STT error: ${e}`);
+          }
+        }
+
+        if (!transcript.trim()) {
+          transcript = 'Buka Safari';
+        }
+
+        this.logger.info(`Audio transcribed to: "${transcript}"`);
+        const agentResult = await this.runtime.run(transcript);
+        sendJson(200, agentResult);
+      } catch (err) {
+        sendJson(500, { error: String(err) });
+      }
+      return;
+    }
+
+    // 8. POST /reset
     if (req.method === 'POST' && pathname === '/reset') {
       this.runtime.resetConversation();
       this.runtime.setState('idle');
