@@ -10,6 +10,7 @@ public final class AppState: ObservableObject {
     @Published public var isConnected = false
     @Published public var lastResponse: String = ""
     @Published public var liveTranscript: String = ""
+    @Published public var inputText: String = ""
     @Published public var pendingConfirmation: ConfirmationRequest? = nil
     @Published public var isOverlayVisible = true
     @Published public var audioLevel: Float = 0.0
@@ -82,7 +83,11 @@ public final class AppState: ObservableObject {
         speechRecognizer.$liveTranscript
             .receive(on: DispatchQueue.main)
             .sink { [weak self] transcript in
-                self?.liveTranscript = transcript
+                guard let self = self else { return }
+                self.liveTranscript = transcript
+                if !transcript.isEmpty {
+                    self.inputText = transcript
+                }
             }
             .store(in: &cancellables)
 
@@ -105,13 +110,24 @@ public final class AppState: ObservableObject {
 
         speechRecognizer.onTranscriptFinalized = { [weak self] finalTranscript in
             guard let self = self else { return }
-            print("Speech recognized via SFSpeechRecognizer: \(finalTranscript)")
-            self.sendQuery(text: finalTranscript)
+            print("[AppState] Speech recognized: \"\(finalTranscript)\"")
+            self.liveTranscript = finalTranscript
+            self.inputText = finalTranscript
+
+            // Brief visual delay so user sees the recognized text in the input box before auto-submitting
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                guard let self = self else { return }
+                let query = self.inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !query.isEmpty {
+                    print("[AppState] Auto-submitting voice query: \"\(query)\"")
+                    self.sendQuery(text: query)
+                }
+            }
         }
 
         speechRecognizer.onAudioRecorded = { [weak self] audioURL in
             guard let self = self else { return }
-            print("Sending recorded voice audio to agent runtime...")
+            print("[AppState] Sending recorded voice audio to agent runtime...")
             self.state = .thinking
             self.client.sendAudioFile(url: audioURL) { [weak self] result in
                 switch result {
@@ -120,7 +136,8 @@ public final class AppState: ObservableObject {
                     self?.state = .idle
                 case .failure(let err):
                     self?.state = .error
-                    self?.lastResponse = "Error: \(err.localizedDescription)"
+                    self?.errorMessage = err.localizedDescription
+                    self?.lastResponse = ""
                 }
             }
         }
@@ -148,6 +165,7 @@ public final class AppState: ObservableObject {
         checkPermissions()
         state = .listening
         liveTranscript = ""
+        inputText = ""
         errorMessage = nil
         speechRecognizer.startListening()
         client.sendWake()
@@ -162,6 +180,7 @@ public final class AppState: ObservableObject {
         state = .thinking
         lastResponse = ""
         liveTranscript = text
+        inputText = text
         errorMessage = nil
 
         client.sendQuery(text: text) { [weak self] result in
@@ -185,6 +204,7 @@ public final class AppState: ObservableObject {
         client.sendReset()
         lastResponse = ""
         liveTranscript = ""
+        inputText = ""
         errorMessage = nil
         state = .idle
         pendingConfirmation = nil

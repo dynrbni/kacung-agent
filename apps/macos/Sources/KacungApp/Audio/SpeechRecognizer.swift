@@ -19,7 +19,7 @@ public final class SpeechRecognizer: ObservableObject {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
 
-    // Audio recording file for failsafe fallback
+    // Audio recording file for fallback
     private var audioFile: AVAudioFile?
     private let recordingURL = URL(fileURLWithPath: "/tmp/kacung-speech.wav")
 
@@ -39,6 +39,25 @@ public final class SpeechRecognizer: ObservableObject {
         }
     }
 
+    public func requestSpeechAuthorization(completion: @escaping (Bool) -> Void) {
+        let status = SFSpeechRecognizer.authorizationStatus()
+        switch status {
+        case .authorized:
+            completion(true)
+        case .notDetermined:
+            SFSpeechRecognizer.requestAuthorization { authStatus in
+                DispatchQueue.main.async {
+                    print("[SpeechRecognizer] SFSpeechRecognizer authorization status: \(authStatus.rawValue)")
+                    completion(authStatus == .authorized)
+                }
+            }
+        case .denied, .restricted:
+            completion(false)
+        @unknown default:
+            completion(false)
+        }
+    }
+
     public func startListening() {
         guard !isListening else { return }
 
@@ -50,6 +69,7 @@ public final class SpeechRecognizer: ObservableObject {
         isFinalizing = false
         lastSpeechTime = .now()
 
+        // 1. Verify Microphone Permission
         let micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
         if micStatus == .denied || micStatus == .restricted {
             self.errorMessage = "Izin mikrofon belum diberikan. Buka System Settings > Privacy & Security > Microphone."
@@ -60,7 +80,7 @@ public final class SpeechRecognizer: ObservableObject {
             AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
                 DispatchQueue.main.async {
                     if granted {
-                        self?.beginAudioSession()
+                        self?.verifySpeechAndBegin()
                     } else {
                         self?.errorMessage = "Izin mikrofon ditolak."
                     }
@@ -69,10 +89,32 @@ public final class SpeechRecognizer: ObservableObject {
             return
         }
 
-        beginAudioSession()
+        verifySpeechAndBegin()
     }
 
-    private func beginAudioSession() {
+    private func getAvailableRecognizer() -> SFSpeechRecognizer? {
+        if let idRec = SFSpeechRecognizer(locale: Locale(identifier: "id-ID")), idRec.isAvailable {
+            return idRec
+        } else if let sysRec = SFSpeechRecognizer(), sysRec.isAvailable {
+            return sysRec
+        } else if let enRec = SFSpeechRecognizer(locale: Locale(identifier: "en-US")), enRec.isAvailable {
+            return enRec
+        }
+        return self.speechRecognizer
+    }
+
+    private func verifySpeechAndBegin() {
+        requestSpeechAuthorization { [weak self] speechGranted in
+            guard let self = self else { return }
+            if !speechGranted {
+                print("[SpeechRecognizer] Notice: Speech recognition permission is not authorized.")
+                self.errorMessage = "Izin Speech Recognition belum aktif. Buka System Settings > Privacy & Security > Speech Recognition."
+            }
+            self.beginAudioSession(enableRecognizer: speechGranted)
+        }
+    }
+
+    private func beginAudioSession(enableRecognizer: Bool) {
         do {
             let inputNode = audioEngine.inputNode
             let recordingFormat = inputNode.outputFormat(forBus: 0)
@@ -89,36 +131,42 @@ public final class SpeechRecognizer: ObservableObject {
             self.audioFile = try? AVAudioFile(forWriting: recordingURL, settings: recordingFormat.settings)
 
             // 2. Prepare native SFSpeechRecognizer request
-            let request = SFSpeechAudioBufferRecognitionRequest()
-            request.shouldReportPartialResults = true
-            request.addsPunctuation = true
-            if speechRecognizer?.supportsOnDeviceRecognition == true {
-                request.requiresOnDeviceRecognition = false
-            }
-            self.recognitionRequest = request
+            if enableRecognizer {
+                if let recognizer = getAvailableRecognizer(), recognizer.isAvailable {
+                    let request = SFSpeechAudioBufferRecognitionRequest()
+                    request.shouldReportPartialResults = true
+                    request.addsPunctuation = true
+                    self.recognitionRequest = request
 
-            // 3. Start speech recognition task
-            if let recognizer = speechRecognizer, recognizer.isAvailable {
-                self.recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
-                    guard let self = self else { return }
+                    // 3. Start speech recognition task
+                    self.recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
+                        guard let self = self else { return }
 
-                    if let result = result {
-                        let text = result.bestTranscription.formattedString
-                        if !text.isEmpty {
-                            DispatchQueue.main.async {
-                                self.liveTranscript = text
-                                self.hasSpoken = true
-                                self.lastSpeechTime = .now()
+                        if let result = result {
+                            let text = result.bestTranscription.formattedString
+                            if !text.isEmpty {
+                                DispatchQueue.main.async {
+                                    self.liveTranscript = text
+                                    self.hasSpoken = true
+                                    self.lastSpeechTime = .now()
+                                }
+                            }
+                        }
+
+                        if let error = error {
+                            let nsError = error as NSError
+                            if nsError.domain != "kAFAssistantErrorDomain" || (nsError.code != 203 && nsError.code != 216) {
+                                print("[SpeechRecognizer] Notice: \(error.localizedDescription)")
+                                DispatchQueue.main.async {
+                                    if nsError.localizedDescription.contains("denied") || nsError.code == 1700 {
+                                        self.errorMessage = "Akses Speech Recognition ditolak. Buka System Settings > Privacy & Security > Speech Recognition."
+                                    }
+                                }
                             }
                         }
                     }
-
-                    if let error = error {
-                        let nsError = error as NSError
-                        if nsError.domain != "kAFAssistantErrorDomain" || (nsError.code != 203 && nsError.code != 216) {
-                            print("[SpeechRecognizer] Notice: \(error.localizedDescription)")
-                        }
-                    }
+                } else {
+                    print("[SpeechRecognizer] SFSpeechRecognizer is not available.")
                 }
             }
 
@@ -130,8 +178,8 @@ public final class SpeechRecognizer: ObservableObject {
                 // Save to audio file
                 try? self.audioFile?.write(from: buffer)
 
-                // Feed to Apple speech recognizer
-                request.append(buffer)
+                // Feed to Apple speech recognizer if enabled
+                self.recognitionRequest?.append(buffer)
 
                 // Calculate energy & Voice Activity Detection
                 self.processAudioBufferForVAD(buffer: buffer)
