@@ -68,7 +68,7 @@ export class KacungAgentApp {
       ttsProvider,
       logger: this.logger,
       assistantName: this.config.assistant.name,
-      allowedToolNames: ['open_app', 'close_app', 'screenshot'],
+      allowedToolNames: ['open_app', 'close_app', 'screenshot', 'play_music', 'search_music'],
     });
 
     // 5. Create HTTP & WebSocket Servers
@@ -128,7 +128,10 @@ export class KacungAgentApp {
   }
 
   private resolveTTSProvider(): TextToSpeechProvider {
-    if (this.config.tts.provider === 'macos') {
+    // When running with the native macOS app, speech synthesis is handled natively
+    // by AVSpeechSynthesizer upon receiving WebSocket 'speech_start' events.
+    // Having Node simultaneously execute `say` causes audio doubling/echo.
+    if (this.config.tts.provider === 'macos' && process.env.ENABLE_NODE_SAY === 'true') {
       return new MacOSSayTTSProvider({
         defaultVoice: this.config.tts.voice,
         defaultSpeed: this.config.tts.speed,

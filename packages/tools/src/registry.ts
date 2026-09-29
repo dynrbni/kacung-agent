@@ -6,6 +6,7 @@ import { typeTextTool, pressKeyTool } from './definitions/keyboard.js';
 import { readFileTool, writeFileTool } from './definitions/filesystem.js';
 import { runCommandTool } from './definitions/terminal.js';
 import { openUrlTool, webSearchTool, readWebPageTool } from './definitions/web.js';
+import { playMusicTool, searchMusicTool } from './definitions/music.js';
 
 export class ToolRegistry {
   private tools = new Map<string, ToolDefinition>();
@@ -75,6 +76,8 @@ export class ToolRegistry {
       openUrlTool as unknown as ToolDefinition,
       webSearchTool as unknown as ToolDefinition,
       readWebPageTool as unknown as ToolDefinition,
+      playMusicTool as unknown as ToolDefinition,
+      searchMusicTool as unknown as ToolDefinition,
     ];
 
     for (const tool of defaults) {

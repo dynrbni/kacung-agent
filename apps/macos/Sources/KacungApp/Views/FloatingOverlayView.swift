@@ -3,6 +3,15 @@ import SwiftUI
 public struct FloatingOverlayView: View {
     @ObservedObject public var appState: AppState
     @FocusState private var isInputFocused: Bool
+    @State private var isOutputExpanded: Bool = false
+    @State private var hasCopied: Bool = false
+
+    private var promptText: String {
+        if !appState.liveTranscript.isEmpty {
+            return appState.liveTranscript
+        }
+        return appState.inputText
+    }
 
     // Bar multipliers creating a natural audio frequency spectrum curve
     private let barMultipliers: [CGFloat] = [0.4, 0.7, 1.1, 1.6, 2.2, 2.5, 2.1, 1.7, 1.2, 0.8, 0.5]
@@ -133,22 +142,151 @@ public struct FloatingOverlayView: View {
 
                 // Response / Output Card if available
                 if !appState.lastResponse.isEmpty && appState.state != .listening {
-                    VStack(alignment: .leading, spacing: 6) {
-                        if !appState.liveTranscript.isEmpty {
-                            Text(appState.liveTranscript)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .italic()
+                    if isOutputExpanded {
+                        // Full Expanded View: shows full prompt & full output
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Label("Detail Percakapan", systemImage: "text.bubble.fill")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(.cyan)
+
+                                Spacer()
+
+                                // Copy button
+                                Button(action: {
+                                    let pasteboard = NSPasteboard.general
+                                    pasteboard.clearContents()
+                                    pasteboard.setString(appState.lastResponse, forType: .string)
+                                    hasCopied = true
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                        hasCopied = false
+                                    }
+                                }) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: hasCopied ? "checkmark" : "doc.on.doc")
+                                            .font(.system(size: 10))
+                                        Text(hasCopied ? "Disalin!" : "Salin")
+                                            .font(.system(size: 10, weight: .medium))
+                                    }
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 3)
+                                    .background(Color.white.opacity(0.12))
+                                    .cornerRadius(4)
+                                    .foregroundColor(hasCopied ? .green : .primary)
+                                }
+                                .buttonStyle(.plain)
+
+                                // Collapse button
+                                Button(action: {
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                        isOutputExpanded = false
+                                    }
+                                }) {
+                                    HStack(spacing: 3) {
+                                        Text("Tutup")
+                                            .font(.system(size: 10, weight: .medium))
+                                        Image(systemName: "chevron.up")
+                                            .font(.system(size: 9, weight: .bold))
+                                    }
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 3)
+                                    .background(Color.white.opacity(0.12))
+                                    .cornerRadius(4)
+                                    .foregroundColor(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            // Full Prompt display
+                            if !promptText.isEmpty {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("PROMPT KAMU:")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundColor(.secondary)
+
+                                    ScrollView(.vertical, showsIndicators: false) {
+                                        Text(promptText)
+                                            .font(.system(size: 12, weight: .medium))
+                                            .foregroundColor(.cyan.opacity(0.95))
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                            .textSelection(.enabled)
+                                    }
+                                    .frame(maxHeight: 60)
+                                }
+                                .padding(8)
+                                .background(Color.black.opacity(0.15))
+                                .cornerRadius(6)
+                            }
+
+                            Divider().background(Color.white.opacity(0.1))
+
+                            // Full AI Output display
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("RESPONS LENGKAP KACUNG:")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundColor(.secondary)
+
+                                ScrollView(.vertical, showsIndicators: true) {
+                                    Text(appState.lastResponse)
+                                        .font(.system(size: 13))
+                                        .foregroundColor(.primary)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .textSelection(.enabled)
+                                        .padding(.vertical, 2)
+                                }
+                                .frame(maxHeight: 180)
+                            }
                         }
-                        Text(appState.lastResponse)
-                            .font(.system(size: 13))
-                            .lineLimit(6)
-                            .foregroundColor(.primary)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.black.opacity(0.25))
+                        .cornerRadius(10)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.cyan.opacity(0.3), lineWidth: 1)
+                        )
+                    } else {
+                        // Collapsed Output Card (Click to expand)
+                        Button(action: {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                isOutputExpanded = true
+                            }
+                        }) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    if !promptText.isEmpty {
+                                        Text(promptText)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                            .italic()
+                                            .lineLimit(2)
+                                    }
+                                    Spacer()
+                                    HStack(spacing: 3) {
+                                        Text("Lihat Full")
+                                            .font(.system(size: 10, weight: .medium))
+                                        Image(systemName: "chevron.down")
+                                            .font(.system(size: 9, weight: .bold))
+                                    }
+                                    .foregroundColor(.cyan.opacity(0.85))
+                                }
+                                Text(appState.lastResponse)
+                                    .font(.system(size: 13))
+                                    .lineLimit(4)
+                                    .foregroundColor(.primary)
+                                    .multilineTextAlignment(.leading)
+                            }
+                            .padding(10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.black.opacity(0.2))
+                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                            )
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.black.opacity(0.2))
-                    .cornerRadius(8)
                 }
 
                 // Pending Confirmation Dialog inside overlay

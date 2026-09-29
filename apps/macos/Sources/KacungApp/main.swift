@@ -51,7 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupFloatingOverlay() {
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
+            contentRect: NSRect(x: 0, y: 0, width: 440, height: 540),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -71,8 +71,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Center on screen
         if let screen = NSScreen.main {
             let screenRect = screen.visibleFrame
-            let x = screenRect.midX - 200
-            let y = screenRect.midY - 50 // Slightly higher than exact center
+            let x = screenRect.midX - 220
+            let y = screenRect.midY - 120
             panel.setFrameOrigin(NSPoint(x: x, y: y))
         }
 

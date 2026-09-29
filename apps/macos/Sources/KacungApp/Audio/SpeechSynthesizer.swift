@@ -15,6 +15,7 @@ public final class NativeSpeechSynthesizer: NSObject, AVSpeechSynthesizerDelegat
     }
 
     public func speak(text: stringLiteral) {
+        stop()
         let cleanText = text.replacingOccurrences(of: "[*#`_]", with: "", options: .regularExpression)
         let utterance = AVSpeechUtterance(string: cleanText)
 

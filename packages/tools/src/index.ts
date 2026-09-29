@@ -8,3 +8,4 @@ export * from './definitions/keyboard.js';
 export * from './definitions/filesystem.js';
 export * from './definitions/terminal.js';
 export * from './definitions/web.js';
+export * from './definitions/music.js';
