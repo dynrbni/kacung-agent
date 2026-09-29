@@ -92,6 +92,8 @@ public final class SpeechRecognizer: ObservableObject {
         verifySpeechAndBegin()
     }
 
+    private var noiseFloor: Float = 0.008
+
     private func getAvailableRecognizer() -> SFSpeechRecognizer? {
         if let idRec = SFSpeechRecognizer(locale: Locale(identifier: "id-ID")), idRec.isAvailable {
             return idRec
@@ -116,6 +118,14 @@ public final class SpeechRecognizer: ObservableObject {
 
     private func beginAudioSession(enableRecognizer: Bool) {
         do {
+            // Ensure audio engine is completely fresh on each session
+            if audioEngine.isRunning {
+                audioEngine.stop()
+            }
+            audioEngine.inputNode.removeTap(onBus: 0)
+            audioEngine.reset()
+            audioEngine = AVAudioEngine()
+
             let inputNode = audioEngine.inputNode
             let recordingFormat = inputNode.outputFormat(forBus: 0)
 
@@ -171,7 +181,6 @@ public final class SpeechRecognizer: ObservableObject {
             }
 
             // 4. Install tap on inputNode: calculates VAD, updates wave, checks silence
-            inputNode.removeTap(onBus: 0)
             inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
                 guard let self = self else { return }
 
@@ -208,14 +217,16 @@ public final class SpeechRecognizer: ObservableObject {
         }
         let rms = sqrt(sum / Float(frameLength))
 
-        // Scale RMS to a responsive 0.0 - 1.0 audio level
-        let rawLevel = min(max((rms - 0.001) * 55.0, 0.0), 1.0)
+        // Dynamically calibrate ambient room noise
+        if rms < noiseFloor * 1.5 {
+            noiseFloor = (noiseFloor * 0.95) + (rms * 0.05)
+        }
 
-        // Voice detection threshold
-        let isVoiceActive = rawLevel > 0.07
+        let voiceDelta = max(rms - noiseFloor, 0.0)
+        let rawLevel = min(max(voiceDelta * 45.0, 0.0), 1.0)
+        let isVoiceActive = voiceDelta > 0.015
 
         if isVoiceActive {
-            hasSpoken = true
             lastSpeechTime = .now()
         }
 
@@ -224,12 +235,12 @@ public final class SpeechRecognizer: ObservableObject {
             self.audioLevel = (self.audioLevel * 0.25) + (rawLevel * 0.75)
 
             // VAD Silence Check:
-            // If the user has spoken at least once, and audio has remained silent for 1.1 seconds:
-            if self.hasSpoken && !self.isFinalizing {
+            // Only auto-submit IF user has actually spoken text!
+            if self.hasSpoken && !self.liveTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !self.isFinalizing {
                 let now = DispatchTime.now()
                 let silenceSeconds = Double(now.uptimeNanoseconds - self.lastSpeechTime.uptimeNanoseconds) / 1_000_000_000.0
 
-                if silenceSeconds >= 1.1 {
+                if silenceSeconds >= 1.0 {
                     self.isFinalizing = true
                     print("[SpeechRecognizer] Silence of \(String(format: "%.1f", silenceSeconds))s detected! Auto-submitting voice query...")
                     self.finishListening()
@@ -250,8 +261,8 @@ public final class SpeechRecognizer: ObservableObject {
         // Stop capturing audio
         if audioEngine.isRunning {
             audioEngine.stop()
-            audioEngine.inputNode.removeTap(onBus: 0)
         }
+        audioEngine.inputNode.removeTap(onBus: 0)
         recognitionRequest?.endAudio()
 
         // Wait brief 200ms to let the recognizer catch the final trailing word
@@ -265,7 +276,7 @@ public final class SpeechRecognizer: ObservableObject {
             if !finalQuery.isEmpty {
                 print("[SpeechRecognizer] Dispatched voice query: \"\(finalQuery)\"")
                 self.onTranscriptFinalized?(finalQuery)
-            } else if FileManager.default.fileExists(atPath: audioPath.path) {
+            } else if FileManager.default.fileExists(atPath: audioPath.path) && self.hasSpoken {
                 print("[SpeechRecognizer] Native recognizer emitted no text; dispatching audio file fallback...")
                 self.onAudioRecorded?(audioPath)
             }
@@ -275,8 +286,8 @@ public final class SpeechRecognizer: ObservableObject {
     public func stopAndCleanUp() {
         if audioEngine.isRunning {
             audioEngine.stop()
-            audioEngine.inputNode.removeTap(onBus: 0)
         }
+        audioEngine.inputNode.removeTap(onBus: 0)
 
         audioFile = nil
         recognitionRequest?.endAudio()
