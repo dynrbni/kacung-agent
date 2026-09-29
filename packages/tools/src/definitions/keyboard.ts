@@ -156,3 +156,85 @@ export const pressKeyTool: ToolDefinition<PressKeyParams, { key: string; message
     }
   },
 };
+
+export interface HotkeyParams {
+  keys: string[];
+}
+
+export const hotkeyTool: ToolDefinition<HotkeyParams, { keys: string[]; message: string }> = {
+  name: 'hotkey',
+  description: 'Simulates a keyboard shortcut/hotkey combination (e.g. ["command", "space"], ["command", "f"], ["command", "v"]).',
+  permissionLevel: 'SENSITIVE',
+  parameters: {
+    type: 'object',
+    properties: {
+      keys: {
+        type: 'array',
+        items: {
+          type: 'string',
+          description: 'Key name in the sequence (e.g. "command", "shift", "v")',
+        },
+        description: 'List of keys in the hotkey combination, modifiers first then final key (e.g. ["command", "f"] or ["command", "shift", "3"]).',
+      },
+    },
+    required: ['keys'],
+  },
+  validate(params: unknown) {
+    if (!params || typeof params !== 'object') {
+      return { valid: false, error: 'Parameters must be an object' };
+    }
+    const p = params as Record<string, unknown>;
+    if (!Array.isArray(p.keys) || p.keys.length === 0) {
+      return { valid: false, error: 'keys must be a non-empty array of strings' };
+    }
+    return { valid: true };
+  },
+  async execute(params: HotkeyParams, context: ToolExecutionContext): Promise<ToolResult<{ keys: string[]; message: string }>> {
+    const rawKeys = params.keys.map((k) => k.toLowerCase().trim());
+    context.logger.info(`Executing hotkey: ${rawKeys.join('+')}`);
+
+    const modifierNames = new Set(['command', 'cmd', 'control', 'ctrl', 'option', 'alt', 'shift']);
+    const modifiers: string[] = [];
+    let mainKey = '';
+
+    for (const k of rawKeys) {
+      if (k === 'cmd' || k === 'command') modifiers.push('command');
+      else if (k === 'ctrl' || k === 'control') modifiers.push('control');
+      else if (k === 'alt' || k === 'option') modifiers.push('option');
+      else if (k === 'shift') modifiers.push('shift');
+      else mainKey = k;
+    }
+
+    if (!mainKey && modifiers.length > 0) {
+      mainKey = modifiers.pop()!;
+    }
+
+    const modifierClause = modifiers.length > 0
+      ? ` using {${modifiers.map((m) => `${m} down`).join(', ')}}`
+      : '';
+
+    let script = '';
+    const keyCode = KEY_CODE_MAP[mainKey];
+    if (keyCode !== undefined) {
+      script = `tell application "System Events" to key code ${keyCode}${modifierClause}`;
+    } else {
+      const escaped = mainKey.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      script = `tell application "System Events" to keystroke "${escaped}"${modifierClause}`;
+    }
+
+    try {
+      await execFileAsync('osascript', ['-e', script]);
+      return {
+        success: true,
+        data: {
+          keys: rawKeys,
+          message: `Executed hotkey "${rawKeys.join('+')}" successfully.`,
+        },
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      context.logger.error(`Hotkey execution failed: ${msg}`);
+      return { success: false, error: `Hotkey execution failed: ${msg}` };
+    }
+  },
+};

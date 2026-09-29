@@ -291,3 +291,160 @@ print("SUCCESS")
     }
   },
 };
+
+// ----------------------------------------------------------------------------
+// Right Click Tool
+// ----------------------------------------------------------------------------
+export interface RightClickParams {
+  x: number;
+  y: number;
+}
+
+export const rightClickTool: ToolDefinition<RightClickParams, { x: number; y: number; message: string }> = {
+  name: 'right_click',
+  description: 'Simulates a mouse right-click (secondary click) at specific (x, y) screen coordinates.',
+  permissionLevel: 'SENSITIVE',
+  parameters: {
+    type: 'object',
+    properties: {
+      x: { type: 'number', description: 'Horizontal coordinate on screen in pixels' },
+      y: { type: 'number', description: 'Vertical coordinate on screen in pixels' },
+    },
+    required: ['x', 'y'],
+  },
+  validate(params: unknown) {
+    if (!params || typeof params !== 'object') {
+      return { valid: false, error: 'Parameters must be an object' };
+    }
+    const p = params as Record<string, unknown>;
+    if (typeof p.x !== 'number' || typeof p.y !== 'number' || isNaN(p.x) || isNaN(p.y)) {
+      return { valid: false, error: 'x and y must be valid numbers' };
+    }
+    return { valid: true };
+  },
+  async execute(params: RightClickParams, context: ToolExecutionContext): Promise<ToolResult<{ x: number; y: number; message: string }>> {
+    const { x, y } = params;
+    context.logger.info(`Right clicking at (${x}, ${y})`);
+
+    const swiftCode = `
+import CoreGraphics
+import Foundation
+
+let point = CGPoint(x: ${x}, y: ${y})
+let move = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .right)
+move?.post(tap: .cghidEventTap)
+
+usleep(15000)
+
+let down = CGEvent(mouseEventSource: nil, mouseType: .rightMouseDown, mouseCursorPosition: point, mouseButton: .right)
+down?.post(tap: .cghidEventTap)
+
+usleep(30000)
+
+let up = CGEvent(mouseEventSource: nil, mouseType: .rightMouseUp, mouseCursorPosition: point, mouseButton: .right)
+up?.post(tap: .cghidEventTap)
+
+print("SUCCESS")
+`;
+
+    try {
+      await runSwiftSnippet(swiftCode);
+      return {
+        success: true,
+        data: { x, y, message: `Right clicked at (${x}, ${y})` },
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      context.logger.error(`Right click failed: ${msg}`);
+      return { success: false, error: `Right click failed: ${msg}` };
+    }
+  },
+};
+
+// ----------------------------------------------------------------------------
+// Drag Tool
+// ----------------------------------------------------------------------------
+export interface DragParams {
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+}
+
+export const dragTool: ToolDefinition<DragParams, { startX: number; startY: number; endX: number; endY: number; message: string }> = {
+  name: 'drag',
+  description: 'Simulates clicking and dragging the mouse from a start point (startX, startY) to an end point (endX, endY).',
+  permissionLevel: 'SENSITIVE',
+  parameters: {
+    type: 'object',
+    properties: {
+      startX: { type: 'number', description: 'Starting horizontal coordinate' },
+      startY: { type: 'number', description: 'Starting vertical coordinate' },
+      endX: { type: 'number', description: 'Ending horizontal coordinate' },
+      endY: { type: 'number', description: 'Ending vertical coordinate' },
+    },
+    required: ['startX', 'startY', 'endX', 'endY'],
+  },
+  validate(params: unknown) {
+    if (!params || typeof params !== 'object') {
+      return { valid: false, error: 'Parameters must be an object' };
+    }
+    const p = params as Record<string, unknown>;
+    const required = ['startX', 'startY', 'endX', 'endY'];
+    for (const f of required) {
+      if (typeof p[f] !== 'number' || isNaN(p[f] as number)) {
+        return { valid: false, error: `${f} must be a valid number` };
+      }
+    }
+    return { valid: true };
+  },
+  async execute(params: DragParams, context: ToolExecutionContext): Promise<ToolResult<{ startX: number; startY: number; endX: number; endY: number; message: string }>> {
+    const { startX, startY, endX, endY } = params;
+    context.logger.info(`Dragging from (${startX}, ${startY}) to (${endX}, ${endY})`);
+
+    const swiftCode = `
+import CoreGraphics
+import Foundation
+
+let startPoint = CGPoint(x: ${startX}, y: ${startY})
+let endPoint = CGPoint(x: ${endX}, y: ${endY})
+
+let move = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: startPoint, mouseButton: .left)
+move?.post(tap: .cghidEventTap)
+usleep(20000)
+
+let down = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: startPoint, mouseButton: .left)
+down?.post(tap: .cghidEventTap)
+usleep(30000)
+
+// Interpolate steps
+let steps = 10
+for i in 1...steps {
+    let t = Double(i) / Double(steps)
+    let currentX = Double(${startX}) + Double(${endX} - ${startX}) * t
+    let currentY = Double(${startY}) + Double(${endY} - ${startY}) * t
+    let p = CGPoint(x: currentX, y: currentY)
+    let drag = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDragged, mouseCursorPosition: p, mouseButton: .left)
+    drag?.post(tap: .cghidEventTap)
+    usleep(15000)
+}
+
+let up = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: endPoint, mouseButton: .left)
+up?.post(tap: .cghidEventTap)
+
+print("SUCCESS")
+`;
+
+    try {
+      await runSwiftSnippet(swiftCode);
+      return {
+        success: true,
+        data: { startX, startY, endX, endY, message: `Dragged from (${startX}, ${startY}) to (${endX}, ${endY})` },
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      context.logger.error(`Drag failed: ${msg}`);
+      return { success: false, error: `Drag failed: ${msg}` };
+    }
+  },
+};

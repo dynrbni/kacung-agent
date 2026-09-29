@@ -278,3 +278,50 @@ export interface AssistantEvent<T = unknown> {
   payload: T;
   timestamp: number;
 }
+
+// ============================================================================
+// Computer Use & UI Inspection Types
+// ============================================================================
+
+export interface UIElement {
+  role: string;
+  title?: string;
+  value?: string;
+  description?: string;
+  frame?: { x: number; y: number; width: number; height: number };
+  actions?: string[];
+  children?: UIElement[];
+  focused?: boolean;
+  enabled?: boolean;
+}
+
+export interface TaskObservation {
+  timestamp: number;
+  type: 'screen' | 'ui' | 'app_state' | 'command_output' | 'error' | 'verification';
+  data: unknown;
+}
+
+export interface TaskAction {
+  timestamp: number;
+  name: string;
+  parameters: Record<string, unknown>;
+}
+
+export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
+
+export interface TaskContext {
+  taskId: string;
+  goal: string;
+  currentApp?: string;
+  observations: TaskObservation[];
+  actions: TaskAction[];
+  results: ToolResult[];
+  status: TaskStatus;
+}
+
+export interface VerificationResult {
+  verified: boolean;
+  action: string;
+  target?: string;
+  details: string;
+}

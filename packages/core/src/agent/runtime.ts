@@ -41,6 +41,7 @@ export class AgentRuntime {
   private maxHistoryChars: number;
   private eventListeners: Set<AssistantEventListener> = new Set();
   private messages: ChatMessage[] = [];
+  private currentAbortController?: AbortController;
 
   constructor(options: AgentRuntimeOptions) {
     this.llmProvider = options.llmProvider;
@@ -54,6 +55,17 @@ export class AgentRuntime {
     this.maxHistoryChars = options.maxHistoryChars ?? 25000;
 
     this.resetConversation();
+  }
+
+  public cancelCurrentTask(): boolean {
+    if (this.currentAbortController) {
+      this.logger.info('Aborting currently running agent task');
+      this.currentAbortController.abort();
+      this.currentAbortController = undefined;
+      this.setState('idle', { cancelled: true });
+      return true;
+    }
+    return false;
   }
 
   public getState(): AssistantState {
@@ -188,6 +200,17 @@ export class AgentRuntime {
         error: 'empty transcript',
       };
     }
+
+    const lower = trimmed.toLowerCase();
+    if (['stop', 'berhenti', 'cancel', 'batal', 'diam'].includes(lower)) {
+      this.cancelCurrentTask();
+      return {
+        text: 'Siap bos, perintah dibatalkan.',
+        steps: [],
+        completed: true,
+      };
+    }
+
     return this.run(trimmed, options);
   }
 
@@ -208,6 +231,9 @@ export class AgentRuntime {
       };
     }
 
+    const abortController = new AbortController();
+    this.currentAbortController = abortController;
+
     this.logger.info(`Agent query received`, {
       timestamp: startTime,
       requestId,
@@ -226,6 +252,16 @@ export class AgentRuntime {
       let finalResponse = '';
 
       while (stepIndex < maxSteps) {
+        if (abortController.signal.aborted) {
+          this.setState('idle', { cancelled: true });
+          return {
+            text: 'Perintah dibatalkan oleh pengguna.',
+            steps,
+            completed: false,
+            error: 'cancelled',
+          };
+        }
+
         stepIndex++;
         const currentStep: AgentStep = { stepIndex };
         const stepStartTime = Date.now();
@@ -492,6 +528,10 @@ export class AgentRuntime {
         completed: false,
         error: errorMsg,
       };
+    } finally {
+      if (this.currentAbortController === abortController) {
+        this.currentAbortController = undefined;
+      }
     }
   }
 }

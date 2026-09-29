@@ -208,4 +208,121 @@ describe('Kacung Agent & 9Router Acceptance Tests', () => {
     expect(result.error).toBe('empty transcript');
     expect(result.text).toBe('Maaf, suara tidak terdeteksi. Bisa diulang kembali?');
   });
+
+  it('Acceptance Test 4: "Putar Bruno Mars di Spotify" -> play_music tool execution', async () => {
+    let callCount = 0;
+    const mock9RouterLLM: LLMProvider = {
+      name: 'ninerouter',
+      model: 'ag/gemini-3.8-flash-high',
+      async complete(): Promise<LLMCompletionResponse> {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            content: null,
+            toolCalls: [
+              {
+                id: 'call_music_1',
+                name: 'play_music',
+                parameters: { query: 'Bruno Mars', app: 'spotify' },
+              },
+            ],
+          };
+        }
+        return {
+          content: 'Siap bos, lagu Bruno Mars sedang diputar di Spotify.',
+          toolCalls: [],
+        };
+      },
+    };
+
+    const executor = new ToolExecutor();
+    const executeSpy = vi.spyOn(executor, 'execute');
+
+    const agent = new KacungAgent({
+      llmProvider: mock9RouterLLM,
+      toolExecutor: executor,
+      assistantName: 'Kacung',
+      debug: false,
+    });
+
+    const result = await agent.handleTranscript('Putar Bruno Mars di Spotify');
+
+    expect(result.completed).toBe(true);
+    expect(executeSpy).toHaveBeenCalledWith(
+      'play_music',
+      { query: 'Bruno Mars', app: 'spotify' },
+      'call_music_1'
+    );
+    expect(result.text).toBe('Siap bos, lagu Bruno Mars sedang diputar di Spotify.');
+  });
+
+  it('Acceptance Test 5: "Chat Andi di WhatsApp, bilang gue telat 15 menit" -> send_whatsapp_message', async () => {
+    let callCount = 0;
+    const mock9RouterLLM: LLMProvider = {
+      name: 'ninerouter',
+      model: 'ag/gemini-3.8-flash-high',
+      async complete(): Promise<LLMCompletionResponse> {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            content: null,
+            toolCalls: [
+              {
+                id: 'call_wa_1',
+                name: 'send_whatsapp_message',
+                parameters: { contact: 'Andi', message: 'gue telat 15 menit' },
+              },
+            ],
+          };
+        }
+        return {
+          content: 'Beres bos, pesan sudah terkirim ke Andi lewat WhatsApp.',
+          toolCalls: [],
+        };
+      },
+    };
+
+    const executor = new ToolExecutor();
+    const executeSpy = vi.spyOn(executor, 'execute');
+
+    const agent = new KacungAgent({
+      llmProvider: mock9RouterLLM,
+      toolExecutor: executor,
+      assistantName: 'Kacung',
+      debug: false,
+    });
+
+    const result = await agent.handleTranscript('Chat Andi di WhatsApp, bilang gue telat 15 menit');
+
+    expect(result.completed).toBe(true);
+    expect(executeSpy).toHaveBeenCalledWith(
+      'send_whatsapp_message',
+      { contact: 'Andi', message: 'gue telat 15 menit' },
+      'call_wa_1'
+    );
+    expect(result.text).toBe('Beres bos, pesan sudah terkirim ke Andi lewat WhatsApp.');
+  });
+
+  it('Acceptance Test 6: Cancellation command "Stop" terminates task immediately', async () => {
+    const mock9RouterLLM: LLMProvider = {
+      name: 'ninerouter',
+      model: 'ag/gemini-3.8-flash-high',
+      async complete(): Promise<LLMCompletionResponse> {
+        return { content: 'test', toolCalls: [] };
+      },
+    };
+
+    const agent = new KacungAgent({
+      llmProvider: mock9RouterLLM,
+      assistantName: 'Kacung',
+      debug: false,
+    });
+
+    const result = await agent.handleTranscript('Stop');
+
+    expect(result.completed).toBe(true);
+    expect(result.text).toBe('Siap bos, perintah dibatalkan.');
+    expect(agent.getState()).toBe('idle');
+  });
 });
+
