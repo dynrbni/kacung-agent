@@ -9,8 +9,11 @@ export interface KacungConfig {
     host: string;
   };
   llm: {
-    provider: 'gemini' | 'openai' | 'anthropic' | 'ollama' | 'mock';
+    provider: 'ninerouter' | 'gemini' | 'openai' | 'anthropic' | 'ollama' | 'mock';
     model: string;
+    nineRouterBaseUrl: string;
+    nineRouterApiKey?: string;
+    nineRouterModel: string;
     geminiApiKey?: string;
     openAiApiKey?: string;
     anthropicApiKey?: string;
@@ -71,14 +74,22 @@ export function loadConfig(envPath?: string): KacungConfig {
 
   const env = process.env;
 
+  const defaultNineRouterModel = env.NINEROUTER_MODEL || 'ag/gemini-3.8-flash-high';
+  const defaultNineRouterBaseUrl = env.NINEROUTER_BASE_URL || 'http://localhost:20128/v1';
+
   const config: KacungConfig = {
     server: {
       port: parseInt(env.PORT || '3847', 10),
       host: env.HOST || '127.0.0.1',
     },
     llm: {
-      provider: (env.LLM_PROVIDER as KacungConfig['llm']['provider']) || 'mock',
-      model: env.LLM_MODEL || (env.LLM_PROVIDER === 'gemini' ? 'gemini-2.0-flash' : 'gpt-4o-mini'),
+      provider:
+        (env.LLM_PROVIDER as KacungConfig['llm']['provider']) ||
+        (env.NINEROUTER_API_KEY !== undefined || env.NINEROUTER_BASE_URL !== undefined ? 'ninerouter' : 'mock'),
+      model: env.NINEROUTER_MODEL || env.LLM_MODEL || defaultNineRouterModel,
+      nineRouterBaseUrl: defaultNineRouterBaseUrl,
+      nineRouterApiKey: env.NINEROUTER_API_KEY,
+      nineRouterModel: defaultNineRouterModel,
       geminiApiKey: env.GEMINI_API_KEY,
       openAiApiKey: env.OPENAI_API_KEY,
       anthropicApiKey: env.ANTHROPIC_API_KEY,

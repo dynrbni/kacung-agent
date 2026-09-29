@@ -10,8 +10,9 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "@kacung/types": "workspace:*",
     "@kacung/config": "workspace:*",
-    "@kacung/tools": "workspace:*"
+    "@kacung/tools": "workspace:*",
+    "@kacung/types": "workspace:*",
+    "openai": "^7.23.0"
   }
 }
