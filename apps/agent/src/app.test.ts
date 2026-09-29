@@ -1,0 +1,99 @@
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { WebSocket } from 'ws';
+import { KacungAgentApp } from './app.js';
+import { MockLLMProvider, MockTTSProvider } from '@kacung/core';
+import type { KacungConfig } from '@kacung/config';
+
+describe('KacungAgentApp Server', () => {
+  let app: KacungAgentApp;
+  const testPort = 3991;
+
+  const testConfig: KacungConfig = {
+    server: { port: testPort, host: '127.0.0.1' },
+    llm: {
+      provider: 'mock',
+      model: 'mock',
+      ollamaBaseUrl: '',
+      ollamaModel: '',
+    },
+    stt: { provider: 'mock' },
+    tts: { provider: 'mock', voice: 'Damayanti', speed: 1 },
+    assistant: {
+      name: 'Kacung',
+      wakePhrase: 'Woi Kacung',
+      languages: ['id', 'en'],
+      hotkeyFallback: 'Option+Space',
+    },
+    security: {
+      confirmSensitiveActions: false, // automatic for unit testing
+      confirmDangerousActions: true,
+    },
+    logging: { level: 'error' },
+  };
+
+  beforeAll(async () => {
+    app = new KacungAgentApp({
+      config: testConfig,
+      llmProvider: new MockLLMProvider(),
+      ttsProvider: new MockTTSProvider(),
+    });
+    await app.listen(testPort);
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('responds to GET /health', async () => {
+    const res = await fetch(`http://127.0.0.1:${testPort}/health`);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.status).toBe('ok');
+    expect(data.assistant).toBe('Kacung');
+  });
+
+  it('responds to GET /config with safe assistant info', async () => {
+    const res = await fetch(`http://127.0.0.1:${testPort}/config`);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.assistant.name).toBe('Kacung');
+    expect(data.assistant.wakePhrase).toBe('Woi Kacung');
+    expect(data.tools.length).toBeGreaterThanOrEqual(15);
+  });
+
+  it('processes queries via POST /query', async () => {
+    const res = await fetch(`http://127.0.0.1:${testPort}/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: 'What time is it?' }),
+    });
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.completed).toBe(true);
+    expect(data.text).toContain('Sekarang jam');
+  });
+
+  it('connects to WebSocket and receives live state events', async () => {
+    const ws = new WebSocket(`ws://127.0.0.1:${testPort}/ws`);
+
+    const receivedEvents: Array<{ type: string }> = [];
+
+    await new Promise<void>((resolve, reject) => {
+      ws.on('open', () => {
+        ws.on('message', (msg) => {
+          const parsed = JSON.parse(msg.toString());
+          receivedEvents.push(parsed);
+          if (receivedEvents.length >= 1) {
+            resolve();
+          }
+        });
+      });
+      ws.on('error', reject);
+    });
+
+    ws.close();
+    expect(receivedEvents.length).toBeGreaterThanOrEqual(1);
+    expect(receivedEvents[0].type).toBe('state_change');
+  });
+});
