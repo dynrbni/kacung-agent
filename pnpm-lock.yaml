@@ -33,6 +33,18 @@ importers:
         specifier: ^16.4.7
         version: 16.6.1
 
+  packages/core:
+    dependencies:
+      '@kacung/config':
+        specifier: workspace:*
+        version: link:../config
+      '@kacung/tools':
+        specifier: workspace:*
+        version: link:../tools
+      '@kacung/types':
+        specifier: workspace:*
+        version: link:../types
+
   packages/tools:
     dependencies:
       '@kacung/config':
