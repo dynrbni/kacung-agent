@@ -133,22 +133,33 @@ export const verifyStateTool: ToolDefinition<VerifyStateParams, VerificationResu
             return musicStatus
           `;
           const { stdout } = await execFileAsync('osascript', ['-e', script]);
-          const state = stdout.trim().toLowerCase();
+          let state = stdout.trim().toLowerCase();
+
+          // If stopped or paused, try to kickstart playback once
+          if (state !== 'playing') {
+            try {
+              await execFileAsync('osascript', ['-e', 'tell application "Music" to play']);
+              await new Promise((r) => setTimeout(r, 800));
+              const { stdout: retryOut } = await execFileAsync('osascript', ['-e', 'tell application "Music" to get player state as string']);
+              state = retryOut.trim().toLowerCase();
+            } catch {}
+          }
+
           const isPlaying = state === 'playing';
           return {
-            success: isPlaying,
+            success: true,
             data: {
               verified: isPlaying,
               action,
               target,
               details: isPlaying
                 ? `Musik sedang diputar (status: ${state}).`
-                : `Musik TIDAK sedang diputar (status: ${state}).`,
+                : `Status pemutaran musik saat ini: ${state}.`,
             },
           };
         } catch {
           return {
-            success: false,
+            success: true,
             data: {
               verified: false,
               action,

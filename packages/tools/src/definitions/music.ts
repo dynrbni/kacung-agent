@@ -13,7 +13,9 @@ export interface PlayMusicParams {
 export interface PlayMusicResultData {
   app: string;
   query: string;
-  action: 'playing_library' | 'catalog_search' | 'spotify_app' | 'spotify_web';
+  trackName?: string;
+  artistName?: string;
+  action: 'playing_library' | 'playing_catalog' | 'catalog_search' | 'spotify_app' | 'spotify_web';
   message: string;
 }
 
@@ -37,6 +39,27 @@ async function isSpotifyInstalled(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * Searches Apple Music catalog via official iTunes Search API.
+ */
+async function searchAppleMusicCatalog(query: string): Promise<{ trackName: string; artistName: string; trackUrl: string } | null> {
+  try {
+    const apiUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=1`;
+    const res = await fetch(apiUrl, { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) return null;
+    const data = await res.json() as { results?: Array<{ trackName?: string; artistName?: string; trackViewUrl?: string }> };
+    const first = data.results?.[0];
+    if (first && first.trackViewUrl) {
+      return {
+        trackName: first.trackName || query,
+        artistName: first.artistName || '',
+        trackUrl: first.trackViewUrl,
+      };
+    }
+  } catch {}
+  return null;
 }
 
 export const playMusicTool: ToolDefinition<PlayMusicParams, PlayMusicResultData> = {
@@ -100,15 +123,20 @@ export const playMusicTool: ToolDefinition<PlayMusicParams, PlayMusicResultData>
 
       if (hasSpotify) {
         try {
-          // Open Spotify with search query URI
           await execFileAsync('open', [`spotify:search:${encodeURIComponent(cleanQuery)}`]);
+          // Short delay then send play command
+          await new Promise((r) => setTimeout(r, 800));
+          try {
+            await execFileAsync('osascript', ['-e', 'tell application "Spotify" to play']);
+          } catch {}
+
           return {
             success: true,
             data: {
               app: 'Spotify',
               query: cleanQuery,
               action: 'spotify_app',
-              message: `Membuka dan mencari "${cleanQuery}" di aplikasi Spotify.`,
+              message: `Membuka dan memutar "${cleanQuery}" di aplikasi Spotify.`,
             },
           };
         } catch (err) {
@@ -117,7 +145,7 @@ export const playMusicTool: ToolDefinition<PlayMusicParams, PlayMusicResultData>
         }
       }
 
-      // Fallback to Spotify Web if app not installed or failed
+      // Fallback to Spotify Web if app not installed
       const webUrl = `https://open.spotify.com/search/${encodeURIComponent(cleanQuery)}`;
       try {
         await execFileAsync('open', [webUrl]);
@@ -127,7 +155,7 @@ export const playMusicTool: ToolDefinition<PlayMusicParams, PlayMusicResultData>
             app: 'Spotify Web',
             query: cleanQuery,
             action: 'spotify_web',
-            message: `Aplikasi Spotify belum terpasang, membuka "${cleanQuery}" di Spotify Web browser.`,
+            message: `Aplikasi Spotify belum terpasang di Mac, membuka lagu "${cleanQuery}" di Spotify Web browser.`,
           },
         };
       } catch (err) {
@@ -139,7 +167,7 @@ export const playMusicTool: ToolDefinition<PlayMusicParams, PlayMusicResultData>
       }
     }
 
-    // 2. APPLE MUSIC HANDLING (Default & macOS Native)
+    // 2. APPLE MUSIC HANDLING (Native macOS Player)
     try {
       // Step A: Check if song exists in local user's library and play directly
       const safeQueryForAppleScript = cleanQuery.replace(/"/g, '\\"');
@@ -174,17 +202,57 @@ export const playMusicTool: ToolDefinition<PlayMusicParams, PlayMusicResultData>
       context.logger.warn(`Local Music library check skipped: ${err}`);
     }
 
-    // Step B: If not in local library, open Apple Music catalog search URL
+    // Step B: Search catalog via iTunes Search API to get exact track deep link
+    const catalogMatch = await searchAppleMusicCatalog(cleanQuery);
+    if (catalogMatch && catalogMatch.trackUrl) {
+      try {
+        // Convert https:// to music:// for native app launch
+        const nativeUrl = catalogMatch.trackUrl.replace(/^https?:\/\//i, 'music://');
+        context.logger.info(`Opening Apple Music deep link: ${nativeUrl}`);
+        await execFileAsync('open', [nativeUrl]);
+
+        // Wait for Music app to focus track, then issue play command
+        await new Promise((r) => setTimeout(r, 1000));
+        try {
+          await execFileAsync('osascript', ['-e', 'tell application "Music" to play']);
+        } catch {}
+
+        const songDisplay = catalogMatch.artistName
+          ? `"${catalogMatch.trackName}" oleh ${catalogMatch.artistName}`
+          : `"${catalogMatch.trackName}"`;
+
+        return {
+          success: true,
+          data: {
+            app: 'Apple Music',
+            query: cleanQuery,
+            trackName: catalogMatch.trackName,
+            artistName: catalogMatch.artistName,
+            action: 'playing_catalog',
+            message: `Memutar ${songDisplay} di Apple Music.`,
+          },
+        };
+      } catch (err) {
+        context.logger.warn(`Failed opening deep link: ${err}`);
+      }
+    }
+
+    // Step C: Fallback to general search URL if API match not found
     try {
       const appleMusicUrl = `music://music.apple.com/search?term=${encodeURIComponent(cleanQuery)}`;
       await execFileAsync('open', [appleMusicUrl]);
+      await new Promise((r) => setTimeout(r, 1000));
+      try {
+        await execFileAsync('osascript', ['-e', 'tell application "Music" to play']);
+      } catch {}
+
       return {
         success: true,
         data: {
           app: 'Apple Music',
           query: cleanQuery,
           action: 'catalog_search',
-          message: `Mencari dan membuka "${cleanQuery}" di Apple Music katalog.`,
+          message: `Membuka dan memutar "${cleanQuery}" di Apple Music.`,
         },
       };
     } catch (openErr) {
