@@ -61,13 +61,14 @@ export class KacungAgentApp {
       requestConfirmation: (req) => this.handleConfirmationRequest(req),
     });
 
-    // 4. Configure Agent Runtime
+    // 4. Configure Agent Runtime (restricted to Milestone 1 initial tools)
     this.runtime = new AgentRuntime({
       llmProvider,
       toolExecutor: this.executor,
       ttsProvider,
       logger: this.logger,
       assistantName: this.config.assistant.name,
+      allowedToolNames: ['open_app', 'close_app', 'screenshot'],
     });
 
     // 5. Create HTTP & WebSocket Servers

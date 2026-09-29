@@ -21,6 +21,9 @@ export interface AgentRuntimeOptions {
   logger?: Logger;
   assistantName?: string;
   debug?: boolean;
+  allowedToolNames?: string[];
+  maxHistoryMessages?: number;
+  maxHistoryChars?: number;
 }
 
 export type AssistantEventListener = (event: AssistantEvent) => void;
@@ -33,6 +36,9 @@ export class AgentRuntime {
   private logger: Logger;
   private assistantName: string;
   private debug: boolean;
+  private allowedToolNames?: string[];
+  private maxHistoryMessages: number;
+  private maxHistoryChars: number;
   private eventListeners: Set<AssistantEventListener> = new Set();
   private messages: ChatMessage[] = [];
 
@@ -43,6 +49,9 @@ export class AgentRuntime {
     this.logger = options.logger || new StructuredLogger('info');
     this.assistantName = options.assistantName || 'Kacung';
     this.debug = options.debug ?? (process.env.DEBUG === 'true' || process.env.NODE_ENV !== 'production');
+    this.allowedToolNames = options.allowedToolNames;
+    this.maxHistoryMessages = options.maxHistoryMessages ?? 8;
+    this.maxHistoryChars = options.maxHistoryChars ?? 25000;
 
     this.resetConversation();
   }
@@ -66,6 +75,69 @@ export class AgentRuntime {
         content: buildSystemPrompt(this.assistantName),
       },
     ];
+  }
+
+  /**
+   * Enforces a sliding context window to prevent token explosion.
+   */
+  private pruneConversationHistory(
+    maxMessages: number = this.maxHistoryMessages,
+    maxTotalChars: number = this.maxHistoryChars
+  ): void {
+    if (this.messages.length <= 1) return;
+
+    const systemMessage = this.messages[0];
+    let recent = this.messages.slice(1);
+
+    // 1. Cap message count to maxMessages
+    if (recent.length > maxMessages) {
+      recent = recent.slice(-maxMessages);
+      // Clean up orphaned tool messages that don't follow an assistant message with tool_calls
+      while (recent.length > 0 && recent[0].role === 'tool') {
+        recent.shift();
+      }
+    }
+
+    // 2. Bound total character length to prevent context explosion
+    let totalChars = recent.reduce((sum, m) => sum + (m.content?.length || 0), 0);
+    while (recent.length > 2 && totalChars > maxTotalChars) {
+      const removed = recent.shift();
+      if (removed) {
+        totalChars -= (removed.content?.length || 0);
+      }
+      while (recent.length > 0 && recent[0].role === 'tool') {
+        const orphan = recent.shift();
+        if (orphan) {
+          totalChars -= (orphan.content?.length || 0);
+        }
+      }
+    }
+
+    this.messages = [systemMessage, ...recent];
+  }
+
+  /**
+   * Sanitizes tool results before appending to prompt history,
+   * stripping raw base64 data and truncating oversized outputs.
+   */
+  private sanitizeToolResultForHistory(result: ExecutedToolCall['result']): string {
+    try {
+      const clone = JSON.parse(JSON.stringify(result));
+      if (clone && clone.data && typeof clone.data === 'object') {
+        if (typeof clone.data.base64 === 'string') {
+          clone.data.base64 = `[base64 image payload: ${clone.data.base64.length} chars]`;
+        }
+        for (const [key, value] of Object.entries(clone.data)) {
+          if (typeof value === 'string' && value.length > 1000) {
+            clone.data[key] = value.slice(0, 1000) + '... [truncated]';
+          }
+        }
+      }
+      const serialized = JSON.stringify(clone);
+      return serialized.length > 2000 ? serialized.slice(0, 2000) + '... [truncated]' : serialized;
+    } catch {
+      return JSON.stringify({ success: result.success, message: 'Execution complete' });
+    }
   }
 
   public onEvent(listener: AssistantEventListener): () => void {
@@ -159,9 +231,17 @@ export class AgentRuntime {
         const stepStartTime = Date.now();
 
         this.logger.debug(`Step ${stepIndex}/${maxSteps} starting`, { requestId, stepIndex });
-        const tools = this.toolExecutor.getRegistry().list();
+        
+        // Filter tools if restricted to milestone 1
+        const allTools = this.toolExecutor.getRegistry().list();
+        const tools = this.allowedToolNames
+          ? allTools.filter((t) => this.allowedToolNames!.includes(t.name))
+          : allTools;
 
-        // 1. LLM completion lifecycle
+        // Prune history to enforce sliding context window before dispatching
+        this.pruneConversationHistory();
+
+        // 1. LLM completion lifecycle with auto-recovery on token overflow
         const llmStartTime = Date.now();
         this.logger.info('LLM request dispatched', {
           timestamp: llmStartTime,
@@ -170,11 +250,45 @@ export class AgentRuntime {
           model,
         });
 
-        const completion = await this.llmProvider.complete({
-          messages: this.messages,
-          tools,
-          temperature: options.temperature,
-        });
+        let completion;
+        try {
+          completion = await this.llmProvider.complete({
+            messages: this.messages,
+            tools,
+            temperature: options.temperature,
+          });
+        } catch (llmErr) {
+          const errMsg = llmErr instanceof Error ? llmErr.message : String(llmErr);
+          if (
+            errMsg.includes('exceeds the maximum number of tokens') ||
+            errMsg.includes('token count exceeds') ||
+            errMsg.includes('context_length_exceeded') ||
+            errMsg.includes('maximum context length')
+          ) {
+            this.logger.warn('Token limit exceeded; resetting conversation history and retrying with current prompt', {
+              requestId,
+              error: errMsg,
+            });
+            // Hard reset conversation to just system prompt + user query
+            this.messages = [
+              {
+                role: 'system',
+                content: buildSystemPrompt(this.assistantName),
+              },
+              {
+                role: 'user',
+                content: query,
+              },
+            ];
+            completion = await this.llmProvider.complete({
+              messages: this.messages,
+              tools,
+              temperature: options.temperature,
+            });
+          } else {
+            throw llmErr;
+          }
+        }
 
         const llmDurationMs = Date.now() - llmStartTime;
         this.logger.info('LLM response received', {
@@ -251,12 +365,12 @@ export class AgentRuntime {
               error: executed.result.error,
             });
 
-            // Append tool observation to conversation history
+            // Append sanitized tool observation to conversation history
             this.messages.push({
               role: 'tool',
               name: tc.name,
               tool_call_id: tc.id,
-              content: JSON.stringify(executed.result),
+              content: this.sanitizeToolResultForHistory(executed.result),
             });
           }
 
