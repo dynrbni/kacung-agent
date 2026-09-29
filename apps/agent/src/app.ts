@@ -387,7 +387,11 @@ export class KacungAgentApp {
         }
 
         if (!transcript.trim()) {
-          transcript = 'Buka Safari';
+          this.logger.warn('Audio could not be transcribed (no STT provider returned a transcript)');
+          sendJson(400, {
+            error: 'Suara tidak terdengar atau tidak dapat ditranskripsikan. Pastikan berbicara lebih jelas atau ketik langsung di kolom input.',
+          });
+          return;
         }
 
         this.logger.info(`Audio transcribed to: "${transcript}"`);

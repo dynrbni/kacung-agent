@@ -2,7 +2,6 @@ import SwiftUI
 
 public struct FloatingOverlayView: View {
     @ObservedObject public var appState: AppState
-    @State private var inputText: String = ""
     @FocusState private var isInputFocused: Bool
 
     // Bar multipliers creating a natural audio frequency spectrum curve
@@ -79,7 +78,8 @@ public struct FloatingOverlayView: View {
                             .lineLimit(3)
                         Spacer()
                         Button("Settings") {
-                            PermissionManager.shared.openSystemSettings(for: "microphone")
+                            let type = error.lowercased().contains("speech") ? "speech" : "microphone"
+                            PermissionManager.shared.openSystemSettings(for: type)
                         }
                         .font(.caption2)
                         .buttonStyle(.bordered)
@@ -162,14 +162,16 @@ public struct FloatingOverlayView: View {
 
                 // Input bar (Supports natural typing and voice toggle)
                 HStack(spacing: 8) {
-                    TextField(appState.state == .listening ? "Mendengarkan suara Anda..." : "Tanya atau suruh Kacung...", text: $inputText)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 13))
-                        .focused($isInputFocused)
-                        .disabled(appState.state == .listening)
-                        .onSubmit {
-                            submitQuery()
-                        }
+                    TextField(
+                        appState.state == .listening && appState.inputText.isEmpty ? "Mendengarkan suara Anda..." : "Tanya atau suruh Kacung...",
+                        text: $appState.inputText
+                    )
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .focused($isInputFocused)
+                    .onSubmit {
+                        submitQuery()
+                    }
 
                     if appState.state == .thinking || appState.state == .executing {
                         ProgressView()
@@ -198,7 +200,7 @@ public struct FloatingOverlayView: View {
                         }
                         .buttonStyle(.plain)
 
-                        if !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        if !appState.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             Button(action: submitQuery) {
                                 Image(systemName: "arrow.up.circle.fill")
                                     .font(.system(size: 18))
@@ -239,9 +241,11 @@ public struct FloatingOverlayView: View {
     }
 
     private func submitQuery() {
-        let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = appState.inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
-        inputText = ""
+        if appState.state == .listening {
+            appState.stopListening()
+        }
         appState.sendQuery(text: text)
     }
 
