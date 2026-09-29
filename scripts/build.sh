@@ -7,10 +7,11 @@ pnpm build
 echo "=== Building Native macOS SwiftUI App ==="
 swift build --package-path apps/macos
 
-echo "=== Packaging Kacung.app Bundle with Info.plist & Entitlements ==="
+echo "=== Packaging & Signing Kacung.app Bundle ==="
 mkdir -p apps/macos/Kacung.app/Contents/MacOS
 cp apps/macos/Info.plist apps/macos/Kacung.app/Contents/Info.plist
 cp apps/macos/.build/arm64-apple-macosx/debug/Kacung apps/macos/Kacung.app/Contents/MacOS/Kacung
 chmod +x apps/macos/Kacung.app/Contents/MacOS/Kacung
+codesign --force --deep --sign - apps/macos/Kacung.app
 
-echo "=== All Kacung components built and packaged successfully! ==="
+echo "=== All Kacung components built, packaged and signed successfully! ==="

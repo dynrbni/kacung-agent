@@ -18,13 +18,18 @@ public final class SpeechRecognizer: ObservableObject {
     private var speechRecognizer: SFSpeechRecognizer?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
-    private var silenceTimer: Timer?
-    private var hasDetectedSpeech = false
+
+    // Audio recording file for failsafe fallback
     private var audioFile: AVAudioFile?
     private let recordingURL = URL(fileURLWithPath: "/tmp/kacung-speech.wav")
 
+    // High-precision DispatchTime VAD (Voice Activity Detection)
+    private var lastSpeechTime: DispatchTime = .now()
+    private var hasSpoken: Bool = false
+    private var isFinalizing: Bool = false
+
     private init() {
-        // Preferred locale: id-ID, fallback to system locale, then en-US
+        // Preferred locale: id-ID, fallback to system default (e.g. en_ID), then en-US
         if let idRec = SFSpeechRecognizer(locale: Locale(identifier: "id-ID")), idRec.isAvailable {
             self.speechRecognizer = idRec
         } else if let sysRec = SFSpeechRecognizer(), sysRec.isAvailable {
@@ -37,17 +42,17 @@ public final class SpeechRecognizer: ObservableObject {
     public func startListening() {
         guard !isListening else { return }
 
-        // Clean any leftover tasks
         stopAndCleanUp()
 
         liveTranscript = ""
         errorMessage = nil
-        hasDetectedSpeech = false
+        hasSpoken = false
+        isFinalizing = false
+        lastSpeechTime = .now()
 
-        // Check microphone status
         let micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
         if micStatus == .denied || micStatus == .restricted {
-            self.errorMessage = "Izin mikrofon belum diberikan. Silakan aktifkan di System Settings > Privacy > Microphone."
+            self.errorMessage = "Izin mikrofon belum diberikan. Buka System Settings > Privacy & Security > Microphone."
             return
         }
 
@@ -57,14 +62,13 @@ public final class SpeechRecognizer: ObservableObject {
                     if granted {
                         self?.beginAudioSession()
                     } else {
-                        self?.errorMessage = "Izin mikrofon ditolak oleh pengguna."
+                        self?.errorMessage = "Izin mikrofon ditolak."
                     }
                 }
             }
             return
         }
 
-        // Microphone is already authorized, start listening immediately
         beginAudioSession()
     }
 
@@ -74,7 +78,7 @@ public final class SpeechRecognizer: ObservableObject {
             let recordingFormat = inputNode.outputFormat(forBus: 0)
 
             guard recordingFormat.sampleRate > 0 else {
-                self.errorMessage = "Format audio mikrofon tidak valid (sample rate 0)."
+                self.errorMessage = "Mikrofon tidak aktif atau sample rate 0."
                 return
             }
 
@@ -88,88 +92,63 @@ public final class SpeechRecognizer: ObservableObject {
             let request = SFSpeechAudioBufferRecognitionRequest()
             request.shouldReportPartialResults = true
             request.addsPunctuation = true
+            if speechRecognizer?.supportsOnDeviceRecognition == true {
+                request.requiresOnDeviceRecognition = false
+            }
             self.recognitionRequest = request
 
-            // 3. Install tap on inputNode to capture real-time audio
-            inputNode.removeTap(onBus: 0)
-            inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
-                // Write to WAV file
-                try? self?.audioFile?.write(from: buffer)
-
-                // Pipe buffer to speech recognizer
-                request.append(buffer)
-
-                // Calculate visual audio level
-                self?.calculateAudioLevel(buffer: buffer)
-            }
-
-            audioEngine.prepare()
-            try audioEngine.start()
-            self.isListening = true
-            print("AudioEngine started, listening for voice...")
-
-            // 4. Start speech recognition task
+            // 3. Start speech recognition task
             if let recognizer = speechRecognizer, recognizer.isAvailable {
                 self.recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
                     guard let self = self else { return }
 
                     if let result = result {
-                        let transcribed = result.bestTranscription.formattedString
-                        if !transcribed.isEmpty {
-                            self.liveTranscript = transcribed
-                            self.hasDetectedSpeech = true
-                            self.resetSilenceTimer()
+                        let text = result.bestTranscription.formattedString
+                        if !text.isEmpty {
+                            DispatchQueue.main.async {
+                                self.liveTranscript = text
+                                self.hasSpoken = true
+                                self.lastSpeechTime = .now()
+                            }
                         }
                     }
 
                     if let error = error {
                         let nsError = error as NSError
-                        // Ignore standard cancellation codes
                         if nsError.domain != "kAFAssistantErrorDomain" || (nsError.code != 203 && nsError.code != 216) {
-                            if !self.hasDetectedSpeech {
-                                print("Speech recognition note: \(error.localizedDescription)")
-                            }
+                            print("[SpeechRecognizer] Notice: \(error.localizedDescription)")
                         }
                     }
                 }
             }
+
+            // 4. Install tap on inputNode: calculates VAD, updates wave, checks silence
+            inputNode.removeTap(onBus: 0)
+            inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
+                guard let self = self else { return }
+
+                // Save to audio file
+                try? self.audioFile?.write(from: buffer)
+
+                // Feed to Apple speech recognizer
+                request.append(buffer)
+
+                // Calculate energy & Voice Activity Detection
+                self.processAudioBufferForVAD(buffer: buffer)
+            }
+
+            audioEngine.prepare()
+            try audioEngine.start()
+            self.isListening = true
+            print("[SpeechRecognizer] Listening started. Speak now...")
+
         } catch {
-            self.errorMessage = "Gagal mengaktifkan audio engine: \(error.localizedDescription)"
+            self.errorMessage = "Gagal menyalakan mikrofon: \(error.localizedDescription)"
             stopAndCleanUp()
         }
     }
 
-    public func stopListening() {
-        guard isListening else { return }
-        silenceTimer?.invalidate()
-        silenceTimer = nil
-        finishListening()
-    }
-
-    private func finishListening() {
-        let finalQuery = liveTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
-        let recordedURL = recordingURL
-        stopAndCleanUp()
-
-        if !finalQuery.isEmpty {
-            onTranscriptFinalized?(finalQuery)
-        } else if FileManager.default.fileExists(atPath: recordedURL.path) {
-            // Fallback to sending recorded audio to agent if native recognizer didn't emit text
-            onAudioRecorded?(recordedURL)
-        }
-    }
-
-    private func resetSilenceTimer() {
-        silenceTimer?.invalidate()
-        // Finalize automatically after 1.5 seconds of silence
-        silenceTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { [weak self] _ in
-            Task { @MainActor in
-                self?.finishListening()
-            }
-        }
-    }
-
-    private func calculateAudioLevel(buffer: AVAudioPCMBuffer) {
+    private func processAudioBufferForVAD(buffer: AVAudioPCMBuffer) {
         guard let channelData = buffer.floatChannelData?[0] else { return }
         let frameLength = Int(buffer.frameLength)
         guard frameLength > 0 else { return }
@@ -181,19 +160,71 @@ public final class SpeechRecognizer: ObservableObject {
         }
         let rms = sqrt(sum / Float(frameLength))
 
-        // Dynamic sensitivity: scale RMS to [0.0, 1.0] with aggressive responsiveness
-        let normalized = min(max((rms - 0.001) * 45.0, 0.0), 1.0)
+        // Scale RMS to a responsive 0.0 - 1.0 audio level
+        let rawLevel = min(max((rms - 0.001) * 55.0, 0.0), 1.0)
+
+        // Voice detection threshold
+        let isVoiceActive = rawLevel > 0.07
+
+        if isVoiceActive {
+            hasSpoken = true
+            lastSpeechTime = .now()
+        }
 
         DispatchQueue.main.async {
-            // Apply subtle smoothing so wave looks organic
-            self.audioLevel = (self.audioLevel * 0.3) + (normalized * 0.7)
+            // Smooth audio level for visualizer wave
+            self.audioLevel = (self.audioLevel * 0.25) + (rawLevel * 0.75)
+
+            // VAD Silence Check:
+            // If the user has spoken at least once, and audio has remained silent for 1.1 seconds:
+            if self.hasSpoken && !self.isFinalizing {
+                let now = DispatchTime.now()
+                let silenceSeconds = Double(now.uptimeNanoseconds - self.lastSpeechTime.uptimeNanoseconds) / 1_000_000_000.0
+
+                if silenceSeconds >= 1.1 {
+                    self.isFinalizing = true
+                    print("[SpeechRecognizer] Silence of \(String(format: "%.1f", silenceSeconds))s detected! Auto-submitting voice query...")
+                    self.finishListening()
+                }
+            }
+        }
+    }
+
+    public func stopListening() {
+        guard isListening else { return }
+        finishListening()
+    }
+
+    private func finishListening() {
+        guard isListening else { return }
+        isListening = false
+
+        // Stop capturing audio
+        if audioEngine.isRunning {
+            audioEngine.stop()
+            audioEngine.inputNode.removeTap(onBus: 0)
+        }
+        recognitionRequest?.endAudio()
+
+        // Wait brief 200ms to let the recognizer catch the final trailing word
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            guard let self = self else { return }
+            let finalQuery = self.liveTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+            let audioPath = self.recordingURL
+
+            self.stopAndCleanUp()
+
+            if !finalQuery.isEmpty {
+                print("[SpeechRecognizer] Dispatched voice query: \"\(finalQuery)\"")
+                self.onTranscriptFinalized?(finalQuery)
+            } else if FileManager.default.fileExists(atPath: audioPath.path) {
+                print("[SpeechRecognizer] Native recognizer emitted no text; dispatching audio file fallback...")
+                self.onAudioRecorded?(audioPath)
+            }
         }
     }
 
     public func stopAndCleanUp() {
-        silenceTimer?.invalidate()
-        silenceTimer = nil
-
         if audioEngine.isRunning {
             audioEngine.stop()
             audioEngine.inputNode.removeTap(onBus: 0)
@@ -208,5 +239,6 @@ public final class SpeechRecognizer: ObservableObject {
 
         isListening = false
         audioLevel = 0.0
+        isFinalizing = false
     }
 }
