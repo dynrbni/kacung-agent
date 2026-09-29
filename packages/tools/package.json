@@ -1,0 +1,16 @@
+{
+  "name": "@kacung/tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@kacung/types": "workspace:*",
+    "@kacung/config": "workspace:*"
+  }
+}
