@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>com.dynrbni.kacung</string>
+    <key>CFBundleName</key>
+    <string>Kacung</string>
+    <key>CFBundleDisplayName</key>
+    <string>Kacung</string>
+    <key>CFBundleExecutable</key>
+    <string>Kacung</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Kacung memerlukan akses mikrofon untuk mendengarkan perintah suara Anda.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Kacung memerlukan pengenalan suara untuk mengubah ucapan Anda menjadi teks.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Kacung memerlukan Apple Events untuk mengontrol aplikasi macOS.</string>
+</dict>
+</plist>
