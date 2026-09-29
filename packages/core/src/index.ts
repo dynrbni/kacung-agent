@@ -2,6 +2,7 @@ export * from './logger/index.js';
 export * from './memory/store.js';
 export * from './providers/llm/gemini.js';
 export * from './providers/llm/openai.js';
+export * from './providers/llm/ninerouter.js';
 export * from './providers/llm/mock.js';
 export * from './providers/tts/macos-say.js';
 export * from './providers/tts/mock.js';
