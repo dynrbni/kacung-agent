@@ -8,7 +8,7 @@ export interface OpenAppParams {
   appName: string;
 }
 
-export const openAppTool: ToolDefinition<OpenAppParams, { appName: string; message: string }> = {
+export const openAppTool: ToolDefinition<OpenAppParams, { appName: string; app: string; message: string }> = {
   name: 'open_app',
   description: 'Opens a macOS application by its name (e.g., "Safari", "Spotify", "Terminal", "VS Code").',
   permissionLevel: 'SAFE',
@@ -32,7 +32,7 @@ export const openAppTool: ToolDefinition<OpenAppParams, { appName: string; messa
     }
     return { valid: true };
   },
-  async execute(params: OpenAppParams, context: ToolExecutionContext): Promise<ToolResult<{ appName: string; message: string }>> {
+  async execute(params: OpenAppParams, context: ToolExecutionContext): Promise<ToolResult<{ appName: string; app: string; message: string }>> {
     const appName = params.appName.trim();
     context.logger.info(`Opening application: ${appName}`);
 
@@ -43,6 +43,7 @@ export const openAppTool: ToolDefinition<OpenAppParams, { appName: string; messa
         success: true,
         data: {
           appName,
+          app: appName,
           message: `Application "${appName}" opened successfully.`,
         },
       };
@@ -55,6 +56,7 @@ export const openAppTool: ToolDefinition<OpenAppParams, { appName: string; messa
           success: true,
           data: {
             appName,
+            app: appName,
             message: `Application "${appName}" activated via AppleScript.`,
           },
         };
@@ -77,7 +79,7 @@ export interface CloseAppParams {
 export const closeAppTool: ToolDefinition<CloseAppParams, { appName: string; message: string }> = {
   name: 'close_app',
   description: 'Gracefully closes/quits a macOS application by its name.',
-  permissionLevel: 'SENSITIVE',
+  permissionLevel: 'SAFE',
   parameters: {
     type: 'object',
     properties: {

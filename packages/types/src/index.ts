@@ -30,7 +30,21 @@ export interface StateChangeEvent {
  * SENSITIVE: File modifications, standard terminal commands, message sending.
  * DANGEROUS: System configuration, file deletions, destructive terminal commands.
  */
-export type PermissionLevel = 'SAFE' | 'SENSITIVE' | 'DANGEROUS';
+export const PermissionLevel = {
+  SAFE: 'SAFE',
+  SENSITIVE: 'SENSITIVE',
+  DANGEROUS: 'DANGEROUS',
+} as const;
+
+export type PermissionLevel = (typeof PermissionLevel)[keyof typeof PermissionLevel];
+
+export type Tool<TArgs = unknown, TResult = unknown> = {
+  name: string;
+  description: string;
+  inputSchema: unknown;
+  permission: PermissionLevel;
+  execute(args: TArgs): Promise<ToolResult<TResult>>;
+};
 
 export interface ConfirmationRequest {
   id: string;
