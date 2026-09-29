@@ -12,6 +12,7 @@ import { ToolExecutor } from '@kacung/tools';
 import {
   AgentRuntime,
   StructuredLogger,
+  NineRouterProvider,
   GeminiLLMProvider,
   OpenAILLMProvider,
   MockLLMProvider,
@@ -78,7 +79,30 @@ export class KacungAgentApp {
   }
 
   private resolveLLMProvider(): LLMProvider {
-    const { provider, model, geminiApiKey, openAiApiKey, ollamaBaseUrl } = this.config.llm;
+    const {
+      provider,
+      model,
+      nineRouterBaseUrl,
+      nineRouterApiKey,
+      nineRouterModel,
+      geminiApiKey,
+      openAiApiKey,
+      ollamaBaseUrl,
+    } = this.config.llm;
+
+    if (
+      provider === 'ninerouter' ||
+      (nineRouterBaseUrl && provider !== 'gemini' && provider !== 'openai' && provider !== 'ollama')
+    ) {
+      const activeModel = nineRouterModel || model || 'ag/gemini-3.8-flash-high';
+      this.logger.info(`Using 9Router LLM Provider at ${nineRouterBaseUrl} (model: ${activeModel})`);
+      return new NineRouterProvider({
+        baseUrl: nineRouterBaseUrl,
+        apiKey: nineRouterApiKey,
+        model: activeModel,
+        logger: this.logger,
+      });
+    }
 
     if (provider === 'gemini' && geminiApiKey) {
       this.logger.info(`Using Gemini LLM Provider (model: ${model})`);
@@ -315,7 +339,7 @@ export class KacungAgentApp {
           return;
         }
 
-        const result = await this.runtime.run(text);
+        const result = await this.runtime.handleTranscript(text);
         sendJson(200, result);
       } catch (err) {
         sendJson(500, { error: String(err) });
@@ -395,7 +419,7 @@ export class KacungAgentApp {
         }
 
         this.logger.info(`Audio transcribed to: "${transcript}"`);
-        const agentResult = await this.runtime.run(transcript);
+        const agentResult = await this.runtime.handleTranscript(transcript);
         sendJson(200, agentResult);
       } catch (err) {
         sendJson(500, { error: String(err) });
