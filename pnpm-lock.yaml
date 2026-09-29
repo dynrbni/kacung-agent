@@ -8,6 +8,18 @@ importers:
 
   .:
     devDependencies:
+      '@kacung/config':
+        specifier: workspace:*
+        version: link:packages/config
+      '@kacung/core':
+        specifier: workspace:*
+        version: link:packages/core
+      '@kacung/tools':
+        specifier: workspace:*
+        version: link:packages/tools
+      '@kacung/types':
+        specifier: workspace:*
+        version: link:packages/types
       '@types/node':
         specifier: ^22.13.0
         version: 22.20.4

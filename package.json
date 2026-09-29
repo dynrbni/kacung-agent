@@ -12,6 +12,10 @@
     "clean": "pnpm --recursive run clean && rimraf dist"
   },
   "devDependencies": {
+    "@kacung/config": "workspace:*",
+    "@kacung/core": "workspace:*",
+    "@kacung/tools": "workspace:*",
+    "@kacung/types": "workspace:*",
     "@types/node": "^22.13.0",
     "rimraf": "^6.0.1",
     "tsx": "^4.19.2",
