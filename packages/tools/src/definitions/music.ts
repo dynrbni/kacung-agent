@@ -206,16 +206,59 @@ export const playMusicTool: ToolDefinition<PlayMusicParams, PlayMusicResultData>
     const catalogMatch = await searchAppleMusicCatalog(cleanQuery);
     if (catalogMatch && catalogMatch.trackUrl) {
       try {
-        // Convert https:// to music:// for native app launch
+        // 1. Pause any currently playing track first so player does not resume previous song
+        try {
+          await execFileAsync('osascript', ['-e', 'tell application "Music" to pause']);
+        } catch {}
+
+        // 2. Open new track/album deep link
         const nativeUrl = catalogMatch.trackUrl.replace(/^https?:\/\//i, 'music://');
         context.logger.info(`Opening Apple Music deep link: ${nativeUrl}`);
         await execFileAsync('open', [nativeUrl]);
 
-        // Wait for Music app to focus track, then issue play command
-        await new Promise((r) => setTimeout(r, 1000));
+        // 3. Wait for Music app to load and render the new album view
+        await new Promise((r) => setTimeout(r, 1400));
+
+        // 4. Click the "Play" button in the album details view to start playing the new song
+        const clickPlayScript = `
+          tell application "Music" to activate
+          delay 0.4
+          tell application "System Events"
+            tell process "Music"
+              set frontmost to true
+              try
+                set sg to first UI element of front window whose role is "AXSplitGroup"
+                repeat with el in every UI element of sg
+                  try
+                    if description of el is "album details" then
+                      repeat with b in every button of el
+                        try
+                          if description of b is "play" or name of b is "Play" then
+                            click b
+                            return "clicked_play"
+                          end if
+                        end try
+                      end repeat
+                    end if
+                  end try
+                end repeat
+              end try
+              return "fallback"
+            end tell
+          end tell
+        `;
+
         try {
-          await execFileAsync('osascript', ['-e', 'tell application "Music" to play']);
-        } catch {}
+          const { stdout: clickOut } = await execFileAsync('osascript', ['-e', clickPlayScript]);
+          context.logger.info(`Apple Music play click result: ${clickOut.trim()}`);
+          if (clickOut.trim() !== 'clicked_play') {
+            await execFileAsync('osascript', ['-e', 'tell application "Music" to play']);
+          }
+        } catch {
+          try {
+            await execFileAsync('osascript', ['-e', 'tell application "Music" to play']);
+          } catch {}
+        }
 
         const songDisplay = catalogMatch.artistName
           ? `"${catalogMatch.trackName}" oleh ${catalogMatch.artistName}`
@@ -239,12 +282,47 @@ export const playMusicTool: ToolDefinition<PlayMusicParams, PlayMusicResultData>
 
     // Step C: Fallback to general search URL if API match not found
     try {
+      try {
+        await execFileAsync('osascript', ['-e', 'tell application "Music" to pause']);
+      } catch {}
+
       const appleMusicUrl = `music://music.apple.com/search?term=${encodeURIComponent(cleanQuery)}`;
       await execFileAsync('open', [appleMusicUrl]);
-      await new Promise((r) => setTimeout(r, 1000));
+      await new Promise((r) => setTimeout(r, 1400));
+
+      const fallbackClickScript = `
+        tell application "Music" to activate
+        delay 0.4
+        tell application "System Events"
+          tell process "Music"
+            set frontmost to true
+            try
+              set sg to first UI element of front window whose role is "AXSplitGroup"
+              repeat with el in every UI element of sg
+                try
+                  repeat with b in every button of el
+                    try
+                      if description of b is "play" or name of b is "Play" then
+                        click b
+                        return "clicked_play"
+                      end if
+                    end try
+                  end repeat
+                end try
+              end repeat
+            end try
+            return "fallback"
+          end tell
+        end tell
+      `;
+
       try {
-        await execFileAsync('osascript', ['-e', 'tell application "Music" to play']);
-      } catch {}
+        await execFileAsync('osascript', ['-e', fallbackClickScript]);
+      } catch {
+        try {
+          await execFileAsync('osascript', ['-e', 'tell application "Music" to play']);
+        } catch {}
+      }
 
       return {
         success: true,
