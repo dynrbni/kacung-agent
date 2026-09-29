@@ -85,7 +85,7 @@ kacung/
 | Tool | Permission | Description |
 | :--- | :--- | :--- |
 | `open_app(appName)` | `SAFE` | Launches or brings an app to the foreground via `open -a` / AppleScript. |
-| `close_app(appName)` | `SENSITIVE` | Gracefully quits an application. |
+| `close_app(appName)` | `SAFE` | Gracefully quits an application. |
 | `screenshot()` | `SAFE` | Captures the screen via macOS `screencapture` silently. |
 | `click(x, y)` | `SENSITIVE` | Simulates native mouse left click via CoreGraphics event tap. |
 | `double_click(x, y)` | `SENSITIVE` | Simulates native mouse double click via CoreGraphics event tap. |
@@ -131,7 +131,35 @@ Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
 ```
-Add your preferred API key (Gemini, OpenAI, or run offline with local Ollama or the built-in mock provider).
+
+#### 9Router Setup & Configuration:
+
+Kacung integrates with local **9Router** (`http://localhost:20128/v1`) using an OpenAI-compatible interface and defaults to `ag/gemini-3.8-flash-high`.
+
+1. **Start 9Router**: Ensure your local 9Router server is running at `http://localhost:20128/v1`.
+2. **Configure the provider/model in 9Router**: Add your upstream provider (e.g., Gemini) and configure model `ag/gemini-3.8-flash-high`.
+3. **Copy the API key** generated in 9Router.
+4. **Put the API key into `.env`**:
+   ```env
+   NINEROUTER_BASE_URL=http://localhost:20128/v1
+   NINEROUTER_API_KEY=your_actual_key_here
+   NINEROUTER_MODEL=ag/gemini-3.8-flash-high
+   ```
+5. **Start Kacung**:
+   ```bash
+   ./scripts/start-agent.sh
+   ./scripts/run-macos.sh
+   ```
+6. **Test with voice or text**:
+   ```text
+   "Buka Spotify"
+   ```
+
+#### Environment Variables:
+* `NINEROUTER_BASE_URL`: OpenAI-compatible endpoint URL for 9Router (defaults to `http://localhost:20128/v1`).
+* `NINEROUTER_API_KEY`: API key used to authenticate with 9Router (keep blank in git; configure only in local `.env`).
+* `NINEROUTER_MODEL`: LLM model identifier routed through 9Router (defaults to `ag/gemini-3.8-flash-high`).
+
 
 ### Build:
 ```bash
