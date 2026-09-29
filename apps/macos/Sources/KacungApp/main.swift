@@ -17,10 +17,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Register AppState window reference
         AppState.shared.overlayWindow = overlayPanel
 
-        // Show overlay on initial launch
+        // Show overlay and start listening on initial launch
         AppState.shared.showOverlay()
+        AppState.shared.startListening()
 
-        print("Kacung macOS application initialized successfully.")
+        print("Kacung macOS application initialized successfully and is listening.")
     }
 
     private func setupStatusItem() {
