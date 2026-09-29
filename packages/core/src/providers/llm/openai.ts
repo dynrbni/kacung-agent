@@ -14,9 +14,9 @@ export interface OpenAILLMOptions {
 
 export class OpenAILLMProvider implements LLMProvider {
   public name = 'openai';
+  public baseUrl: string;
+  public model: string;
   private apiKey?: string;
-  private baseUrl: string;
-  private model: string;
 
   constructor(options: OpenAILLMOptions = {}) {
     this.apiKey = options.apiKey;

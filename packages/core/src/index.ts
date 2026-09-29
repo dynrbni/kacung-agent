@@ -10,3 +10,4 @@ export * from './providers/stt/mock.js';
 export * from './providers/wake/hotkey.js';
 export * from './agent/prompt.js';
 export * from './agent/runtime.js';
+export * from './agent/agent.js';

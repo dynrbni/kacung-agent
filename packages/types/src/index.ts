@@ -150,6 +150,7 @@ export interface AgentStep {
 }
 
 export interface AgentRunOptions {
+  requestId?: string;
   maxSteps?: number;
   temperature?: number;
   context?: Record<string, unknown>;
@@ -181,6 +182,8 @@ export interface LLMCompletionResponse {
 
 export interface LLMProvider {
   name: string;
+  model?: string;
+  baseUrl?: string;
   complete: (options: LLMCompletionOptions) => Promise<LLMCompletionResponse>;
 }
 

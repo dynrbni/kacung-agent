@@ -13,6 +13,7 @@ export interface NineRouterOptions {
   baseUrl?: string;
   model?: string;
   timeoutMs?: number;
+  logger?: unknown;
 }
 
 export class NineRouterProvider implements LLMProvider {
