@@ -65,22 +65,65 @@ public struct FloatingOverlayView: View {
                     .buttonStyle(.plain)
                 }
 
-                // Audio waveform when listening
+                // Error Banner with System Settings helper
+                if let error = appState.errorMessage {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.red)
+                        Text(error)
+                            .font(.system(size: 11))
+                            .foregroundColor(.red)
+                            .lineLimit(3)
+                        Spacer()
+                        Button("Settings") {
+                            PermissionManager.shared.openSystemSettings(for: "microphone")
+                        }
+                        .font(.caption2)
+                        .buttonStyle(.bordered)
+                    }
+                    .padding(8)
+                    .background(Color.red.opacity(0.15))
+                    .cornerRadius(8)
+                }
+
+                // Audio waveform & live speech transcript when listening
                 if appState.state == .listening {
-                    HStack(spacing: 4) {
-                        ForEach(0..<8) { index in
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(LinearGradient(colors: [.cyan, .blue], startPoint: .top, endPoint: .bottom))
-                                .frame(width: 4, height: max(6, CGFloat(appState.audioLevel * 40.0) * (CGFloat(index % 3 + 1) * 0.4)))
-                                .animation(.easeOut(duration: 0.1), value: appState.audioLevel)
+                    VStack(spacing: 8) {
+                        HStack(spacing: 4) {
+                            ForEach(0..<10) { index in
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(LinearGradient(colors: [.cyan, .blue], startPoint: .top, endPoint: .bottom))
+                                    .frame(width: 4, height: max(6, CGFloat(appState.audioLevel * 45.0) * (CGFloat(index % 4 + 1) * 0.35)))
+                                    .animation(.easeOut(duration: 0.1), value: appState.audioLevel)
+                            }
+                        }
+                        .frame(height: 24)
+
+                        if !appState.liveTranscript.isEmpty {
+                            Text("\"\(appState.liveTranscript)\"")
+                                .font(.system(size: 14, weight: .medium, design: .rounded))
+                                .foregroundColor(.cyan)
+                                .lineLimit(3)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 8)
+                        } else {
+                            Text("Bicara sekarang (contoh: \"Buka Safari\", \"Jam berapa sekarang\")...")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
                         }
                     }
-                    .frame(height: 24)
+                    .padding(.vertical, 4)
                 }
 
                 // Response / Output Card if available
-                if !appState.lastResponse.isEmpty {
+                if !appState.lastResponse.isEmpty && appState.state != .listening {
                     VStack(alignment: .leading, spacing: 6) {
+                        if !appState.liveTranscript.isEmpty {
+                            Text(appState.liveTranscript)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .italic()
+                        }
                         Text(appState.lastResponse)
                             .font(.system(size: 13))
                             .lineLimit(6)
@@ -101,12 +144,13 @@ public struct FloatingOverlayView: View {
                     )
                 }
 
-                // Input bar (Supports both natural typing and voice)
+                // Input bar (Supports natural typing and voice toggle)
                 HStack(spacing: 8) {
-                    TextField("Tanya atau suruh Kacung...", text: $inputText)
+                    TextField(appState.state == .listening ? "Mendengarkan suara Anda..." : "Tanya atau suruh Kacung...", text: $inputText)
                         .textFieldStyle(.plain)
                         .font(.system(size: 13))
                         .focused($isInputFocused)
+                        .disabled(appState.state == .listening)
                         .onSubmit {
                             submitQuery()
                         }
@@ -123,9 +167,9 @@ public struct FloatingOverlayView: View {
                             }
                         }) {
                             Image(systemName: appState.state == .listening ? "stop.fill" : "mic.fill")
-                                .font(.system(size: 13))
+                                .font(.system(size: 14))
                                 .foregroundColor(appState.state == .listening ? .red : .accentColor)
-                                .frame(width: 24, height: 24)
+                                .padding(4)
                         }
                         .buttonStyle(.plain)
 

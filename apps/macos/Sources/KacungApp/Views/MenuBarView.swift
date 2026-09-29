@@ -66,9 +66,44 @@ public struct MenuBarView: View {
             Divider()
 
             // Permissions Check
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("System Permissions")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .fontWeight(.bold)
+
                 HStack {
-                    Image(systemName: appState.isAccessibilityGranted ? "checkmark.circle.fill" : "xmark.circle.fill")
+                    Image(systemName: appState.isMicrophoneGranted ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                        .foregroundColor(appState.isMicrophoneGranted ? .green : .orange)
+                    Text("Microphone")
+                        .font(.caption)
+
+                    if !appState.isMicrophoneGranted {
+                        Spacer()
+                        Button("Grant") {
+                            PermissionManager.shared.openSystemSettings(for: "microphone")
+                        }
+                        .font(.caption2)
+                    }
+                }
+
+                HStack {
+                    Image(systemName: appState.isSpeechGranted ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                        .foregroundColor(appState.isSpeechGranted ? .green : .orange)
+                    Text("Speech Recognition")
+                        .font(.caption)
+
+                    if !appState.isSpeechGranted {
+                        Spacer()
+                        Button("Grant") {
+                            PermissionManager.shared.openSystemSettings(for: "speech")
+                        }
+                        .font(.caption2)
+                    }
+                }
+
+                HStack {
+                    Image(systemName: appState.isAccessibilityGranted ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
                         .foregroundColor(appState.isAccessibilityGranted ? .green : .orange)
                     Text("Accessibility Control")
                         .font(.caption)
@@ -77,21 +112,6 @@ public struct MenuBarView: View {
                         Spacer()
                         Button("Grant") {
                             PermissionManager.shared.openSystemSettings(for: "accessibility")
-                        }
-                        .font(.caption2)
-                    }
-                }
-
-                HStack {
-                    Image(systemName: appState.isMicrophoneGranted ? "checkmark.circle.fill" : "xmark.circle.fill")
-                        .foregroundColor(appState.isMicrophoneGranted ? .green : .orange)
-                    Text("Microphone Access")
-                        .font(.caption)
-
-                    if !appState.isMicrophoneGranted {
-                        Spacer()
-                        Button("Grant") {
-                            PermissionManager.shared.openSystemSettings(for: "microphone")
                         }
                         .font(.caption2)
                     }
@@ -107,6 +127,6 @@ public struct MenuBarView: View {
             .foregroundColor(.red)
         }
         .padding(12)
-        .frame(width: 240)
+        .frame(width: 250)
     }
 }
