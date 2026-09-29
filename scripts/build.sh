@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 set -e
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 echo "=== Building Kacung TypeScript Monorepo ==="
 pnpm build
 
-echo "=== Building Native macOS SwiftUI App ==="
-swift build --package-path apps/macos
+echo "=== Building Native macOS SwiftUI App with Embedded Info.plist ==="
+swift build --package-path apps/macos \
+    -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$ROOT_DIR/apps/macos/Info.plist"
 
 echo "=== Packaging & Signing Kacung.app Bundle ==="
 mkdir -p apps/macos/Kacung.app/Contents/MacOS
