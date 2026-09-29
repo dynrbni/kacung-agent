@@ -105,8 +105,24 @@ public final class AppState: ObservableObject {
 
         speechRecognizer.onTranscriptFinalized = { [weak self] finalTranscript in
             guard let self = self else { return }
-            print("Speech recognized: \(finalTranscript)")
+            print("Speech recognized via SFSpeechRecognizer: \(finalTranscript)")
             self.sendQuery(text: finalTranscript)
+        }
+
+        speechRecognizer.onAudioRecorded = { [weak self] audioURL in
+            guard let self = self else { return }
+            print("Sending recorded voice audio to agent runtime...")
+            self.state = .thinking
+            self.client.sendAudioFile(url: audioURL) { [weak self] result in
+                switch result {
+                case .success(let res):
+                    self?.lastResponse = res.text
+                    self?.state = .idle
+                case .failure(let err):
+                    self?.state = .error
+                    self?.lastResponse = "Error: \(err.localizedDescription)"
+                }
+            }
         }
     }
 

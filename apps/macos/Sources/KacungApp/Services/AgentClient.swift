@@ -56,15 +56,13 @@ public final class AgentClient: ObservableObject {
                 @unknown default:
                     break
                 }
-                // Keep listening
                 self.listenForMessages()
 
             case .failure(let error):
-                print("WebSocket error: \(error)")
+                print("WebSocket notice: \(error.localizedDescription)")
                 DispatchQueue.main.async {
                     self.isConnected = false
                 }
-                // Reconnect after delay
                 DispatchQueue.global().asyncAfter(deadline: .now() + 3.0) { [weak self] in
                     self?.connect()
                 }
@@ -127,6 +125,39 @@ public final class AgentClient: ObservableObject {
 
         let payload = ["text": text]
         request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+
+        urlSession.dataTask(with: request) { data, response, error in
+            if let error = error {
+                DispatchQueue.main.async { completion(.failure(error)) }
+                return
+            }
+            guard let data = data else {
+                DispatchQueue.main.async {
+                    completion(.failure(NSError(domain: "AgentClient", code: -1, userInfo: [NSLocalizedDescriptionKey: "No data received"])))
+                }
+                return
+            }
+            do {
+                let res = try JSONDecoder().decode(AgentQueryResponse.self, from: data)
+                DispatchQueue.main.async { completion(.success(res)) }
+            } catch {
+                DispatchQueue.main.async { completion(.failure(error)) }
+            }
+        }.resume()
+    }
+
+    public func sendAudioFile(url: URL, completion: @escaping (Result<AgentQueryResponse, Error>) -> Void) {
+        let endpoint = baseURL.appendingPathComponent("audio")
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("audio/wav", forHTTPHeaderField: "Content-Type")
+
+        guard let audioData = try? Data(contentsOf: url), !audioData.isEmpty else {
+            completion(.failure(NSError(domain: "AgentClient", code: -2, userInfo: [NSLocalizedDescriptionKey: "Empty audio recording"])))
+            return
+        }
+
+        request.httpBody = audioData
 
         urlSession.dataTask(with: request) { data, response, error in
             if let error = error {

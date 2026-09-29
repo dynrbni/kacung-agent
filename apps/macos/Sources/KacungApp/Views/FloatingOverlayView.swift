@@ -5,6 +5,9 @@ public struct FloatingOverlayView: View {
     @State private var inputText: String = ""
     @FocusState private var isInputFocused: Bool
 
+    // Bar multipliers creating a natural audio frequency spectrum curve
+    private let barMultipliers: [CGFloat] = [0.4, 0.7, 1.1, 1.6, 2.2, 2.5, 2.1, 1.7, 1.2, 0.8, 0.5]
+
     public init(appState: AppState) {
         self.appState = appState
     }
@@ -18,17 +21,17 @@ public struct FloatingOverlayView: View {
                     // Animated state icon
                     ZStack {
                         Circle()
-                            .fill(stateColor.opacity(0.2))
-                            .frame(width: 28, height: 28)
+                            .fill(stateColor.opacity(0.25))
+                            .frame(width: 32, height: 32)
 
                         Circle()
                             .stroke(stateColor, lineWidth: 2)
-                            .frame(width: 28, height: 28)
-                            .scaleEffect(appState.state == .listening || appState.state == .thinking ? 1.15 : 1.0)
-                            .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: appState.state)
+                            .frame(width: 32, height: 32)
+                            .scaleEffect(appState.state == .listening ? (1.0 + CGFloat(appState.audioLevel * 0.4)) : (appState.state == .thinking ? 1.15 : 1.0))
+                            .animation(.easeOut(duration: 0.15), value: appState.audioLevel)
 
                         Image(systemName: stateIconName)
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.system(size: 14, weight: .bold))
                             .foregroundColor(stateColor)
                     }
 
@@ -88,17 +91,30 @@ public struct FloatingOverlayView: View {
 
                 // Audio waveform & live speech transcript when listening
                 if appState.state == .listening {
-                    VStack(spacing: 8) {
-                        HStack(spacing: 4) {
-                            ForEach(0..<10) { index in
-                                RoundedRectangle(cornerRadius: 2)
-                                    .fill(LinearGradient(colors: [.cyan, .blue], startPoint: .top, endPoint: .bottom))
-                                    .frame(width: 4, height: max(6, CGFloat(appState.audioLevel * 45.0) * (CGFloat(index % 4 + 1) * 0.35)))
+                    VStack(spacing: 10) {
+                        // Dynamic organic audio waveform
+                        HStack(alignment: .center, spacing: 5) {
+                            ForEach(0..<barMultipliers.count, id: \.self) { index in
+                                let multiplier = barMultipliers[index]
+                                let baseHeight: CGFloat = 6.0
+                                let dynamicHeight: CGFloat = baseHeight + (CGFloat(appState.audioLevel) * 32.0 * multiplier)
+
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [Color.cyan, Color.blue, Color.purple],
+                                            startPoint: .top,
+                                            endPoint: .bottom
+                                        )
+                                    )
+                                    .frame(width: 4.5, height: min(dynamicHeight, 38.0))
                                     .animation(.easeOut(duration: 0.1), value: appState.audioLevel)
                             }
                         }
-                        .frame(height: 24)
+                        .frame(height: 38)
+                        .padding(.vertical, 4)
 
+                        // Real-time transcribed text display
                         if !appState.liveTranscript.isEmpty {
                             Text("\"\(appState.liveTranscript)\"")
                                 .font(.system(size: 14, weight: .medium, design: .rounded))
@@ -107,7 +123,7 @@ public struct FloatingOverlayView: View {
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, 8)
                         } else {
-                            Text("Bicara sekarang (contoh: \"Buka Safari\", \"Jam berapa sekarang\")...")
+                            Text("Bicara sekarang (contoh: \"Buka Safari\", \"Jam berapa\")...")
                                 .font(.system(size: 12))
                                 .foregroundColor(.secondary)
                         }
@@ -166,10 +182,19 @@ public struct FloatingOverlayView: View {
                                 appState.startListening()
                             }
                         }) {
-                            Image(systemName: appState.state == .listening ? "stop.fill" : "mic.fill")
-                                .font(.system(size: 14))
-                                .foregroundColor(appState.state == .listening ? .red : .accentColor)
-                                .padding(4)
+                            ZStack {
+                                if appState.state == .listening {
+                                    Circle()
+                                        .fill(Color.red.opacity(0.2))
+                                        .frame(width: 26, height: 26)
+                                        .scaleEffect(1.0 + CGFloat(appState.audioLevel * 0.3))
+                                        .animation(.easeInOut(duration: 0.2), value: appState.audioLevel)
+                                }
+                                Image(systemName: appState.state == .listening ? "stop.fill" : "mic.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(appState.state == .listening ? .red : .accentColor)
+                            }
+                            .padding(4)
                         }
                         .buttonStyle(.plain)
 
@@ -196,7 +221,7 @@ public struct FloatingOverlayView: View {
                         RoundedRectangle(cornerRadius: 16)
                             .stroke(
                                 LinearGradient(
-                                    colors: [stateColor.opacity(0.5), stateColor.opacity(0.1)],
+                                    colors: [stateColor.opacity(0.6), stateColor.opacity(0.15)],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 ),
@@ -204,7 +229,7 @@ public struct FloatingOverlayView: View {
                             )
                     )
             )
-            .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 10)
+            .shadow(color: Color.black.opacity(0.35), radius: 20, x: 0, y: 10)
         }
         .frame(width: 380)
         .padding()
