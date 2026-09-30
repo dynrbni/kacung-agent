@@ -39,7 +39,7 @@ public final class SpeechRecognizer: ObservableObject {
 
     // Audio recording file for fallback
     private var audioFile: AVAudioFile?
-    private let recordingURL = URL(fileURLWithPath: "/tmp/kacung-speech.wav")
+    private let recordingURL = URL(fileURLWithPath: "/tmp/lafly-speech.wav")
 
     // High-precision DispatchTime VAD (Voice Activity Detection)
     private var lastSpeechTime: DispatchTime = .now()
@@ -192,7 +192,7 @@ public final class SpeechRecognizer: ObservableObject {
                         "VS Code", "Visual Studio Code", "GitHub", "Terminal", "Finder",
                         "Discord", "Telegram", "Microsoft Word", "Word", "Slack", "Notion",
                         // Indonesian Contacts & Entities
-                        "Dimas", "Backsy", "Kacung",
+                        "Dimas", "Backsy", "Lafly",
                         // Common Indonesian / English voice command terms
                         "playlist", "screenshot", "volume", "turunin", "naikin", "buka",
                         "tutup", "putar", "chat", "kirim", "pesan", "bilang", "gue",

@@ -1,4 +1,4 @@
-export function buildSystemPrompt(assistantName: string = 'Kacung'): string {
+export function buildSystemPrompt(assistantName: string = 'Lafly'): string {
   return `You are ${assistantName}, a lightning-fast autonomous computer-use agent and macOS AI assistant.
 
 CORE OPERATIONAL PRINCIPLE:

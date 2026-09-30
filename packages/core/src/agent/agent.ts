@@ -1,5 +1,5 @@
 export {
-  AgentRuntime as KacungAgent,
+  AgentRuntime as LaflyAgent,
   AgentRuntime,
   type AgentRuntimeOptions,
   type AssistantEventListener,

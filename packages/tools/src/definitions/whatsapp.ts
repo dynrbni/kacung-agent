@@ -1,4 +1,4 @@
-import type { ToolDefinition, ToolExecutionContext, ToolResult, WhatsAppMessageResult } from '@kacung/types';
+import type { ToolDefinition, ToolExecutionContext, ToolResult, WhatsAppMessageResult } from '@lafly/types';
 import { WhatsAppController } from '../whatsapp/controller.js';
 import { toolSafety } from '../safety/policy.js';
 

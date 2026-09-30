@@ -6,7 +6,7 @@ import type {
   ToolCallRequest,
   ToolDefinition,
   ChatMessage,
-} from '@kacung/types';
+} from '@lafly/types';
 
 export interface NineRouterOptions {
   apiKey?: string;

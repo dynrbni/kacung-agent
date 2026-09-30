@@ -1,14 +1,14 @@
-import { KacungAgentApp } from './app.js';
-import { getConfig } from '@kacung/config';
+import { LaflyAgentApp } from './app.js';
+import { getConfig } from '@lafly/config';
 
 async function bootstrap() {
   const config = getConfig();
-  const app = new KacungAgentApp({ config });
+  const app = new LaflyAgentApp({ config });
 
   await app.listen(config.server.port, config.server.host);
 
   const shutdown = async (signal: string) => {
-    console.log(`\nReceived ${signal}, shutting down Kacung Agent Server gracefully...`);
+    console.log(`\nReceived ${signal}, shutting down Lafly Agent Server gracefully...`);
     await app.close();
     process.exit(0);
   };
@@ -18,6 +18,6 @@ async function bootstrap() {
 }
 
 bootstrap().catch((err) => {
-  console.error('Fatal error starting Kacung Agent Server:', err);
+  console.error('Fatal error starting Lafly Agent Server:', err);
   process.exit(1);
 });

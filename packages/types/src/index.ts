@@ -1,5 +1,5 @@
 /**
- * Kacung — Core Types & Contracts
+ * Lafly — Core Types & Contracts
  */
 
 // ============================================================================

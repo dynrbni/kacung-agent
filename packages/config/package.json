@@ -1,5 +1,5 @@
 {
-  "name": "@kacung/config",
+  "name": "@lafly/config",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "@kacung/types": "workspace:*",
+    "@lafly/types": "workspace:*",
     "dotenv": "^16.4.7"
   }
 }

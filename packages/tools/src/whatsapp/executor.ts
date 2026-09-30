@@ -1,7 +1,7 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
-import type { Logger, WhatsAppContact, WhatsAppExecutor, WhatsAppMessageResult } from '@kacung/types';
+import type { Logger, WhatsAppContact, WhatsAppExecutor, WhatsAppMessageResult } from '@lafly/types';
 
 const execFileAsync = promisify(execFile);
 

@@ -1,4 +1,4 @@
-import type { PermissionLevel } from '@kacung/types';
+import type { PermissionLevel } from '@lafly/types';
 
 export interface CommandSafetyEvaluation {
   level: PermissionLevel;

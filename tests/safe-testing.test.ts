@@ -4,7 +4,7 @@ import {
   AgentRuntime,
   MockLLMProvider,
   MockTTSProvider,
-} from '@kacung/core';
+} from '@lafly/core';
 import {
   ToolExecutor,
   ToolRegistry,
@@ -16,8 +16,8 @@ import {
   MockWhatsAppExecutor,
   LiveWhatsAppExecutor,
   WhatsAppController,
-} from '@kacung/tools';
-import type { ExecutionPolicy } from '@kacung/types';
+} from '@lafly/tools';
+import type { ExecutionPolicy } from '@lafly/types';
 
 const DRY_RUN: ExecutionPolicy = {
   mode: 'dry_run',

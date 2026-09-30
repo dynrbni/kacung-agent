@@ -1,4 +1,4 @@
-import type { ToolCallRequest } from '@kacung/types';
+import type { ToolCallRequest } from '@lafly/types';
 import { parseCommand } from '../parser/command-parser.js';
 import { validateWhatsAppIntent } from '../parser/validator.js';
 

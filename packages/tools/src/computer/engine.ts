@@ -1,4 +1,4 @@
-import type { Logger, UIElement, ToolResult } from '@kacung/types';
+import type { Logger, UIElement, ToolResult } from '@lafly/types';
 import { openAppTool, closeAppTool, focusAppTool, isAppRunningTool } from '../definitions/apps.js';
 import { clickTool, doubleClickTool, rightClickTool, moveMouseTool, dragTool, scrollTool } from '../definitions/mouse.js';
 import { typeTextTool, pressKeyTool, hotkeyTool } from '../definitions/keyboard.js';

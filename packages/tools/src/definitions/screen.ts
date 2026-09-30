@@ -3,7 +3,7 @@ import { promisify } from 'util';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@kacung/types';
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@lafly/types';
 import { toolSafety } from '../safety/policy.js';
 
 const execFileAsync = promisify(execFile);
@@ -36,7 +36,7 @@ export const screenshotTool: ToolDefinition<ScreenshotParams, ScreenshotResultDa
   async execute(params: ScreenshotParams, context: ToolExecutionContext): Promise<ToolResult<ScreenshotResultData>> {
     context.logger.info('Capturing macOS screen');
     const timestamp = Date.now();
-    const destDir = path.join(os.tmpdir(), 'kacung-screenshots');
+    const destDir = path.join(os.tmpdir(), 'lafly-screenshots');
 
     try {
       if (!fs.existsSync(destDir)) {
@@ -126,7 +126,7 @@ export const screenshotAppTool: ToolDefinition<ScreenshotAppParams, ScreenshotRe
     }
 
     const timestamp = Date.now();
-    const destDir = path.join(os.tmpdir(), 'kacung-screenshots');
+    const destDir = path.join(os.tmpdir(), 'lafly-screenshots');
     if (!fs.existsSync(destDir)) {
       fs.mkdirSync(destDir, { recursive: true });
     }

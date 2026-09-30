@@ -70,15 +70,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Start quietly in background; overlay only appears on Control + Option hotkey trigger
         AppState.shared.hideOverlay()
 
-        NSLog("[Kacung] applicationDidFinishLaunching - AXIsProcessTrusted: %d", AXIsProcessTrusted() ? 1 : 0)
-        print("Kacung macOS application initialized successfully in background. Press Control+Option to summon.")
+        NSLog("[Lafly] applicationDidFinishLaunching - AXIsProcessTrusted: %d", AXIsProcessTrusted() ? 1 : 0)
+        print("Lafly macOS application initialized successfully in background. Press Control+Option to summon.")
     }
 
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: "Kacung")
+            button.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: "Lafly")
             button.action = #selector(togglePopover)
             button.target = self
         }

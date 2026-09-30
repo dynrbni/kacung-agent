@@ -362,10 +362,10 @@ public struct FloatingOverlayView: View {
                             .foregroundColor(.white)
                             .id("siap-bos")
                     } else {
-                        Text("Kacung")
+                        Text("Lafly")
                             .font(.system(size: 13, weight: .medium, design: .default))
                             .foregroundColor(.white.opacity(0.7))
-                            .id("kacung")
+                            .id("lafly")
                     }
                 }
             }

@@ -6,9 +6,9 @@ import type {
   ConfirmationResponse,
   LLMProvider,
   TextToSpeechProvider,
-} from '@kacung/types';
-import { getConfig, type KacungConfig } from '@kacung/config';
-import { ToolExecutor } from '@kacung/tools';
+} from '@lafly/types';
+import { getConfig, type LaflyConfig } from '@lafly/config';
+import { ToolExecutor } from '@lafly/tools';
 import {
   AgentRuntime,
   StructuredLogger,
@@ -18,16 +18,16 @@ import {
   MockLLMProvider,
   MacOSSayTTSProvider,
   MockTTSProvider,
-} from '@kacung/core';
+} from '@lafly/core';
 
-export interface KacungAppOptions {
-  config?: KacungConfig;
+export interface LaflyAppOptions {
+  config?: LaflyConfig;
   llmProvider?: LLMProvider;
   ttsProvider?: TextToSpeechProvider;
 }
 
-export class KacungAgentApp {
-  public config: KacungConfig;
+export class LaflyAgentApp {
+  public config: LaflyConfig;
   public logger: StructuredLogger;
   public runtime: AgentRuntime;
   public executor: ToolExecutor;
@@ -43,7 +43,7 @@ export class KacungAgentApp {
     }
   >();
 
-  constructor(options: KacungAppOptions = {}) {
+  constructor(options: LaflyAppOptions = {}) {
     this.config = options.config || getConfig();
     this.logger = new StructuredLogger(this.config.logging.level, 'AgentServer');
 
@@ -460,7 +460,7 @@ export class KacungAgentApp {
   public listen(port: number, host: string = '127.0.0.1'): Promise<void> {
     return new Promise((resolve) => {
       this.httpServer.listen(port, host, () => {
-        this.logger.info(`Kacung Agent Server listening on http://${host}:${port} (ws://${host}:${port}/ws)`);
+        this.logger.info(`Lafly Agent Server listening on http://${host}:${port} (ws://${host}:${port}/ws)`);
         resolve();
       });
     });

@@ -9,14 +9,14 @@ import type {
   TextToSpeechProvider,
   Logger,
   ExecutedToolCall,
-} from '@kacung/types';
-import { ToolExecutor } from '@kacung/tools';
+} from '@lafly/types';
+import { ToolExecutor } from '@lafly/tools';
 import { buildSystemPrompt } from './prompt.js';
 import { StructuredLogger } from '../logger/index.js';
 import { processTranscript } from '../transcript/index.js';
 import { parseCommand, validateWhatsAppIntent, formatCommandTrace } from '../parser/index.js';
 import { fastRoute, getToolsForDomain, determineReasoningLevel, getModelForReasoningLevel } from '../router/fast-router.js';
-import type { CommandTrace } from '@kacung/types';
+import type { CommandTrace } from '@lafly/types';
 
 export interface AgentRuntimeOptions {
   llmProvider: LLMProvider;
@@ -52,7 +52,7 @@ export class AgentRuntime {
     this.toolExecutor = options.toolExecutor || new ToolExecutor();
     this.ttsProvider = options.ttsProvider;
     this.logger = options.logger || new StructuredLogger('info');
-    this.assistantName = options.assistantName || 'Kacung';
+    this.assistantName = options.assistantName || 'Lafly';
     this.debug = options.debug ?? (process.env.DEBUG === 'true' || process.env.NODE_ENV !== 'production');
     this.allowedToolNames = options.allowedToolNames;
     this.maxHistoryMessages = options.maxHistoryMessages ?? 8;
@@ -800,5 +800,5 @@ export class AgentRuntime {
   }
 }
 
-export { AgentRuntime as KacungAgent };
+export { AgentRuntime as LaflyAgent };
 

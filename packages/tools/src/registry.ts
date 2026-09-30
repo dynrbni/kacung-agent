@@ -1,4 +1,4 @@
-import type { ToolDefinition } from '@kacung/types';
+import type { ToolDefinition } from '@lafly/types';
 import { openAppTool, closeAppTool, focusAppTool, isAppRunningTool } from './definitions/apps.js';
 import { screenshotTool, screenshotAppTool } from './definitions/screen.js';
 import { clickTool, doubleClickTool, rightClickTool, moveMouseTool, dragTool, scrollTool } from './definitions/mouse.js';

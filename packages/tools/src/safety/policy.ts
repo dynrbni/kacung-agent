@@ -1,6 +1,6 @@
 import path from 'path';
 import os from 'os';
-import type { ExecutionMode, ExecutionPolicy, SideEffectLevel, ToolSafetyMetadata } from '@kacung/types';
+import type { ExecutionMode, ExecutionPolicy, SideEffectLevel, ToolSafetyMetadata } from '@lafly/types';
 
 /**
  * Side-effect contract every tool must declare. A tool that omits `safety` is

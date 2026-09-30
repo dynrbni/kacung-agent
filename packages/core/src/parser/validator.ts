@@ -1,4 +1,4 @@
-import type { StructuredActionIntent, WhatsAppIntentValidation } from '@kacung/types';
+import type { StructuredActionIntent, WhatsAppIntentValidation } from '@lafly/types';
 
 /**
  * Validates a parsed WhatsApp intent prior to execution.

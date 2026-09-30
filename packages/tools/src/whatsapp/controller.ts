@@ -1,4 +1,4 @@
-import type { ExecutionPolicy, Logger, WhatsAppContact, WhatsAppMessageResult } from '@kacung/types';
+import type { ExecutionPolicy, Logger, WhatsAppContact, WhatsAppMessageResult } from '@lafly/types';
 import { getExecutionPolicy } from '../safety/policy.js';
 import { LiveWhatsAppExecutor, MockWhatsAppExecutor } from './executor.js';
 

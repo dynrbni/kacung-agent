@@ -34,7 +34,7 @@ public struct ConfirmationModalView: View {
                     .cornerRadius(6)
             }
 
-            Text("Kacung needs your permission to execute:")
+            Text("Lafly needs your permission to execute:")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
 

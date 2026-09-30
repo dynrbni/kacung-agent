@@ -3,7 +3,7 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import { ToolExecutor } from './executor.js';
-import type { ExecutionPolicy } from '@kacung/types';
+import type { ExecutionPolicy } from '@lafly/types';
 
 /**
  * Opt-in live policy for the three cases below that genuinely need real

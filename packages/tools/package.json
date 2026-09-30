@@ -1,5 +1,5 @@
 {
-  "name": "@kacung/tools",
+  "name": "@lafly/tools",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "@kacung/types": "workspace:*",
-    "@kacung/config": "workspace:*"
+    "@lafly/types": "workspace:*",
+    "@lafly/config": "workspace:*"
   }
 }

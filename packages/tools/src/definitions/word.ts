@@ -3,7 +3,7 @@ import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@kacung/types';
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@lafly/types';
 import { toolSafety } from '../safety/policy.js';
 
 const execFileAsync = promisify(execFile);
@@ -63,7 +63,7 @@ export const writeWordDocumentTool: ToolDefinition<WriteWordDocumentParams, Writ
       fullText = content;
     }
 
-    const tempFilePath = path.join(os.tmpdir(), `kacung-word-${Date.now()}.txt`);
+    const tempFilePath = path.join(os.tmpdir(), `lafly-word-${Date.now()}.txt`);
 
     try {
       fs.writeFileSync(tempFilePath, fullText, 'utf8');

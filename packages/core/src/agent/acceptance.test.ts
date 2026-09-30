@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { KacungAgent } from './agent.js';
-import type { LLMProvider, LLMCompletionOptions, LLMCompletionResponse } from '@kacung/types';
-import { ToolExecutor } from '@kacung/tools';
+import { LaflyAgent } from './agent.js';
+import type { LLMProvider, LLMCompletionOptions, LLMCompletionResponse } from '@lafly/types';
+import { ToolExecutor } from '@lafly/tools';
 
-describe('Kacung Agent & 9Router Acceptance Tests', () => {
+describe('Lafly Agent & 9Router Acceptance Tests', () => {
   // ──────────────────────────────────────────────────────────────────────
   // Fast-Route Tests: Simple commands bypass LLM entirely
   // ──────────────────────────────────────────────────────────────────────
@@ -23,10 +23,10 @@ describe('Kacung Agent & 9Router Acceptance Tests', () => {
     const executor = new ToolExecutor();
     const executeSpy = vi.spyOn(executor, 'execute');
 
-    const agent = new KacungAgent({
+    const agent = new LaflyAgent({
       llmProvider: mock9RouterLLM,
       toolExecutor: executor,
-      assistantName: 'Kacung',
+      assistantName: 'Lafly',
       debug: false,
     });
 
@@ -56,10 +56,10 @@ describe('Kacung Agent & 9Router Acceptance Tests', () => {
     const executor = new ToolExecutor();
     const executeSpy = vi.spyOn(executor, 'execute');
 
-    const agent = new KacungAgent({
+    const agent = new LaflyAgent({
       llmProvider: mock9RouterLLM,
       toolExecutor: executor,
-      assistantName: 'Kacung',
+      assistantName: 'Lafly',
       debug: false,
     });
 
@@ -102,10 +102,10 @@ describe('Kacung Agent & 9Router Acceptance Tests', () => {
       };
     });
 
-    const agent = new KacungAgent({
+    const agent = new LaflyAgent({
       llmProvider: mock9RouterLLM,
       toolExecutor: executor,
-      assistantName: 'Kacung',
+      assistantName: 'Lafly',
       debug: false,
     });
 
@@ -132,9 +132,9 @@ describe('Kacung Agent & 9Router Acceptance Tests', () => {
       },
     };
 
-    const agent = new KacungAgent({
+    const agent = new LaflyAgent({
       llmProvider: broken9RouterLLM,
-      assistantName: 'Kacung',
+      assistantName: 'Lafly',
       debug: false,
     });
 
@@ -156,9 +156,9 @@ describe('Kacung Agent & 9Router Acceptance Tests', () => {
       },
     };
 
-    const agent = new KacungAgent({
+    const agent = new LaflyAgent({
       llmProvider: unauthorized9RouterLLM,
-      assistantName: 'Kacung',
+      assistantName: 'Lafly',
       debug: false,
     });
 
@@ -179,9 +179,9 @@ describe('Kacung Agent & 9Router Acceptance Tests', () => {
       },
     };
 
-    const agent = new KacungAgent({
+    const agent = new LaflyAgent({
       llmProvider: mock9RouterLLM,
-      assistantName: 'Kacung',
+      assistantName: 'Lafly',
       debug: false,
     });
 
@@ -210,10 +210,10 @@ describe('Kacung Agent & 9Router Acceptance Tests', () => {
     const executor = new ToolExecutor();
     const executeSpy = vi.spyOn(executor, 'execute');
 
-    const agent = new KacungAgent({
+    const agent = new LaflyAgent({
       llmProvider: mock9RouterLLM,
       toolExecutor: executor,
-      assistantName: 'Kacung',
+      assistantName: 'Lafly',
       debug: false,
     });
 
@@ -243,10 +243,10 @@ describe('Kacung Agent & 9Router Acceptance Tests', () => {
     const executor = new ToolExecutor();
     const executeSpy = vi.spyOn(executor, 'execute');
 
-    const agent = new KacungAgent({
+    const agent = new LaflyAgent({
       llmProvider: mock9RouterLLM,
       toolExecutor: executor,
-      assistantName: 'Kacung',
+      assistantName: 'Lafly',
       debug: false,
     });
 
@@ -271,9 +271,9 @@ describe('Kacung Agent & 9Router Acceptance Tests', () => {
       },
     };
 
-    const agent = new KacungAgent({
+    const agent = new LaflyAgent({
       llmProvider: mock9RouterLLM,
-      assistantName: 'Kacung',
+      assistantName: 'Lafly',
       debug: false,
     });
 

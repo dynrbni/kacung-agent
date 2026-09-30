@@ -10,7 +10,7 @@ public enum AssistantState: String, Codable {
 
     public var title: String {
         switch self {
-        case .idle: return "KACUNG"
+        case .idle: return "LAFLY"
         case .listening: return "Listening..."
         case .thinking: return "Thinking..."
         case .executing: return "Executing..."

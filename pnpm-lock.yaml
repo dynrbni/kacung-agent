@@ -8,16 +8,16 @@ importers:
 
   .:
     devDependencies:
-      '@kacung/config':
+      '@lafly/config':
         specifier: workspace:*
         version: link:packages/config
-      '@kacung/core':
+      '@lafly/core':
         specifier: workspace:*
         version: link:packages/core
-      '@kacung/tools':
+      '@lafly/tools':
         specifier: workspace:*
         version: link:packages/tools
-      '@kacung/types':
+      '@lafly/types':
         specifier: workspace:*
         version: link:packages/types
       '@types/node':
@@ -38,16 +38,16 @@ importers:
 
   apps/agent:
     dependencies:
-      '@kacung/config':
+      '@lafly/config':
         specifier: workspace:*
         version: link:../../packages/config
-      '@kacung/core':
+      '@lafly/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@kacung/tools':
+      '@lafly/tools':
         specifier: workspace:*
         version: link:../../packages/tools
-      '@kacung/types':
+      '@lafly/types':
         specifier: workspace:*
         version: link:../../packages/types
       ws:
@@ -60,7 +60,7 @@ importers:
 
   packages/config:
     dependencies:
-      '@kacung/types':
+      '@lafly/types':
         specifier: workspace:*
         version: link:../types
       dotenv:
@@ -69,13 +69,13 @@ importers:
 
   packages/core:
     dependencies:
-      '@kacung/config':
+      '@lafly/config':
         specifier: workspace:*
         version: link:../config
-      '@kacung/tools':
+      '@lafly/tools':
         specifier: workspace:*
         version: link:../tools
-      '@kacung/types':
+      '@lafly/types':
         specifier: workspace:*
         version: link:../types
       openai:
@@ -84,10 +84,10 @@ importers:
 
   packages/tools:
     dependencies:
-      '@kacung/config':
+      '@lafly/config':
         specifier: workspace:*
         version: link:../config
-      '@kacung/types':
+      '@lafly/types':
         specifier: workspace:*
         version: link:../types
 

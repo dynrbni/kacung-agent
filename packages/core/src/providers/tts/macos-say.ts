@@ -3,7 +3,7 @@ import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import type { TextToSpeechProvider, TTSOptions } from '@kacung/types';
+import type { TextToSpeechProvider, TTSOptions } from '@lafly/types';
 
 const execFileAsync = promisify(execFile);
 
@@ -45,7 +45,7 @@ export class MacOSSayTTSProvider implements TextToSpeechProvider {
     if (!text || text.trim() === '') return null;
 
     const voice = options?.voice || this.defaultVoice;
-    const tempFile = path.join(os.tmpdir(), `kacung-tts-${Date.now()}.aiff`);
+    const tempFile = path.join(os.tmpdir(), `lafly-tts-${Date.now()}.aiff`);
     const cleanText = text.replace(/[*_#`]/g, '').trim();
 
     try {

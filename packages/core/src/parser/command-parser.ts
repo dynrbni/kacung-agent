@@ -2,7 +2,7 @@ import type {
   StructuredActionIntent,
   CommandParseResult,
   WhatsAppIntentValidation,
-} from '@kacung/types';
+} from '@lafly/types';
 import { validateWhatsAppIntent } from './validator.js';
 
 /**

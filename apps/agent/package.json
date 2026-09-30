@@ -1,5 +1,5 @@
 {
-  "name": "@kacung/agent",
+  "name": "@lafly/agent",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,10 +11,10 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "@kacung/types": "workspace:*",
-    "@kacung/config": "workspace:*",
-    "@kacung/tools": "workspace:*",
-    "@kacung/core": "workspace:*",
+    "@lafly/types": "workspace:*",
+    "@lafly/config": "workspace:*",
+    "@lafly/tools": "workspace:*",
+    "@lafly/core": "workspace:*",
     "ws": "^8.18.0"
   },
   "devDependencies": {

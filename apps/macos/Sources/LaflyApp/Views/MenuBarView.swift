@@ -15,7 +15,7 @@ public struct MenuBarView: View {
                     .fill(appState.isConnected ? Color.green : Color.red)
                     .frame(width: 8, height: 8)
 
-                Text("Kacung Assistant")
+                Text("Lafly Assistant")
                     .font(.headline)
 
                 Spacer()
@@ -48,7 +48,7 @@ public struct MenuBarView: View {
             }) {
                 HStack {
                     Image(systemName: "mic.fill")
-                    Text("Activate Voice (Woi Kacung)")
+                    Text("Activate Voice (Woi Lafly)")
                 }
             }
             .buttonStyle(.plain)
@@ -136,7 +136,7 @@ public struct MenuBarView: View {
                     }
 
                     if !appState.isAccessibilityGranted {
-                        Text("Jika sudah ON di System Settings, matikan lalu nyalakan lagi toggle Kacung agar macOS merefresh izin.")
+                        Text("Jika sudah ON di System Settings, matikan lalu nyalakan lagi toggle Lafly agar macOS merefresh izin.")
                             .font(.system(size: 9.5))
                             .foregroundColor(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -160,7 +160,7 @@ public struct MenuBarView: View {
 
             Divider()
 
-            Button("Quit Kacung") {
+            Button("Quit Lafly") {
                 NSApplication.shared.terminate(nil)
             }
             .buttonStyle(.plain)

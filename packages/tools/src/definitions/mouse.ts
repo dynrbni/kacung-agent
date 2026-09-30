@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@kacung/types';
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@lafly/types';
 import { toolSafety } from '../safety/policy.js';
 
 function runSwiftSnippet(code: string): Promise<string> {

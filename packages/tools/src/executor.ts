@@ -6,7 +6,7 @@ import type {
   ConfirmationRequest,
   ExecutionPolicy,
   Logger,
-} from '@kacung/types';
+} from '@lafly/types';
 import { ToolRegistry } from './registry.js';
 import {
   getExecutionPolicy,

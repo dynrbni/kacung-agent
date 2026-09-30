@@ -2,19 +2,19 @@
 import PackageDescription
 
 let package = Package(
-    name: "Kacung",
+    name: "Lafly",
     platforms: [
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "Kacung", targets: ["KacungApp"])
+        .executable(name: "Lafly", targets: ["LaflyApp"])
     ],
     dependencies: [],
     targets: [
         .executableTarget(
-            name: "KacungApp",
+            name: "LaflyApp",
             dependencies: [],
-            path: "Sources/KacungApp"
+            path: "Sources/LaflyApp"
         )
     ]
 )

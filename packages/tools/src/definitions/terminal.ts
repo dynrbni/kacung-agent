@@ -1,5 +1,5 @@
 import { exec } from 'child_process';
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@kacung/types';
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@lafly/types';
 import { evaluateCommandSafety } from '../security/command-safety.js';
 import { toolSafety } from '../safety/policy.js';
 

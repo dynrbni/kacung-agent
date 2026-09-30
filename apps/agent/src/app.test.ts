@@ -1,14 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { WebSocket } from 'ws';
-import { KacungAgentApp } from './app.js';
-import { MockLLMProvider, MockTTSProvider } from '@kacung/core';
-import type { KacungConfig } from '@kacung/config';
+import { LaflyAgentApp } from './app.js';
+import { MockLLMProvider, MockTTSProvider } from '@lafly/core';
+import type { LaflyConfig } from '@lafly/config';
 
-describe('KacungAgentApp Server', () => {
-  let app: KacungAgentApp;
+describe('LaflyAgentApp Server', () => {
+  let app: LaflyAgentApp;
   const testPort = 3991;
 
-  const testConfig: KacungConfig = {
+  const testConfig: LaflyConfig = {
     server: { port: testPort, host: '127.0.0.1' },
     llm: {
       provider: 'mock',
@@ -21,8 +21,8 @@ describe('KacungAgentApp Server', () => {
     stt: { provider: 'mock' },
     tts: { provider: 'mock', voice: 'Damayanti', speed: 1 },
     assistant: {
-      name: 'Kacung',
-      wakePhrase: 'Woi Kacung',
+      name: 'Lafly',
+      wakePhrase: 'Woi Lafly',
       languages: ['id', 'en'],
       hotkeyFallback: 'Option+Space',
     },
@@ -34,7 +34,7 @@ describe('KacungAgentApp Server', () => {
   };
 
   beforeAll(async () => {
-    app = new KacungAgentApp({
+    app = new LaflyAgentApp({
       config: testConfig,
       llmProvider: new MockLLMProvider(),
       ttsProvider: new MockTTSProvider(),
@@ -51,7 +51,7 @@ describe('KacungAgentApp Server', () => {
     expect(res.status).toBe(200);
     const data = (await res.json()) as { status: string; assistant: string };
     expect(data.status).toBe('ok');
-    expect(data.assistant).toBe('Kacung');
+    expect(data.assistant).toBe('Lafly');
   });
 
   it('responds to GET /config with safe assistant info', async () => {
@@ -61,8 +61,8 @@ describe('KacungAgentApp Server', () => {
       assistant: { name: string; wakePhrase: string };
       tools: unknown[];
     };
-    expect(data.assistant.name).toBe('Kacung');
-    expect(data.assistant.wakePhrase).toBe('Woi Kacung');
+    expect(data.assistant.name).toBe('Lafly');
+    expect(data.assistant.wakePhrase).toBe('Woi Lafly');
     expect(data.tools.length).toBeGreaterThanOrEqual(15);
   });
 

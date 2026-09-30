@@ -1,5 +1,5 @@
 {
-  "name": "@kacung/core",
+  "name": "@lafly/core",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,9 +10,9 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "@kacung/config": "workspace:*",
-    "@kacung/tools": "workspace:*",
-    "@kacung/types": "workspace:*",
+    "@lafly/config": "workspace:*",
+    "@lafly/tools": "workspace:*",
+    "@lafly/types": "workspace:*",
     "openai": "^7.23.0"
   }
 }

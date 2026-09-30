@@ -1,12 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
-import { AgentRuntime, HotkeyWakeWordDetector, MockLLMProvider, MockTTSProvider } from '@kacung/core';
-import { ToolExecutor } from '@kacung/tools';
+import { AgentRuntime, HotkeyWakeWordDetector, MockLLMProvider, MockTTSProvider } from '@lafly/core';
+import { ToolExecutor } from '@lafly/tools';
 
 describe('MVP Acceptance Tests (Scenarios 1 - 7)', () => {
   // --------------------------------------------------------------------------
-  // Test 1: Wake word activates Kacung
+  // Test 1: Wake word activates Lafly
   // --------------------------------------------------------------------------
-  it('Test 1: User says "Woi Kacung" -> Kacung activates (transitions to listening)', async () => {
+  it('Test 1: User says "Woi Lafly" -> Lafly activates (transitions to listening)', async () => {
     const wakeDetector = new HotkeyWakeWordDetector();
     let activated = false;
 
@@ -27,7 +27,7 @@ describe('MVP Acceptance Tests (Scenarios 1 - 7)', () => {
   // --------------------------------------------------------------------------
   // Test 2: What time is it? -> Answers using voice
   // --------------------------------------------------------------------------
-  it('Test 2: User: "What time is it?" -> Kacung answers using voice (TTS output)', async () => {
+  it('Test 2: User: "What time is it?" -> Lafly answers using voice (TTS output)', async () => {
     const mockLLM = new MockLLMProvider();
     const mockTTS = new MockTTSProvider();
 
