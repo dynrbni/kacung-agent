@@ -7,13 +7,22 @@ final class NotchHostingView<Content: View>: NSHostingView<Content> {
         
         // Cocoa view coordinates: y=0 is bottom, y=bounds.height is top.
         // Active island content is anchored at the top of the hosting view.
-        let activeHeight: CGFloat = AppState.shared.isOutputExpanded ? 220.0 : 36.0
+        let activeHeight: CGFloat = AppState.shared.isOutputExpanded ? 240.0 : (AppState.shared.notchTopInset > 0 ? AppState.shared.notchTopInset + 4.0 : 36.0)
         let islandBottomY = bounds.height - activeHeight
         
         // If mouse is below the active island area, pass through to windows underneath
         if point.y < islandBottomY {
             return nil
         }
+
+        // Pass through mouse clicks to left/right of the compact notch island
+        let activeWidth: CGFloat = 350.0
+        let islandLeftX = (bounds.width - activeWidth) / 2.0
+        let islandRightX = islandLeftX + activeWidth
+        if point.x < islandLeftX || point.x > islandRightX {
+            return nil
+        }
+
         return super.hitTest(point)
     }
 }
@@ -73,7 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupFloatingOverlay() {
         let defaultWidth: CGFloat = 560
-        let defaultHeight: CGFloat = 240
+        let defaultHeight: CGFloat = 320
 
         let panel = NotchPanel(
             contentRect: NSRect(x: 0, y: 0, width: defaultWidth, height: defaultHeight),

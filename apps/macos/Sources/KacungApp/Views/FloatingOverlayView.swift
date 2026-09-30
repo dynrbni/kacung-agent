@@ -82,13 +82,16 @@ public struct FloatingOverlayView: View {
     @ObservedObject public var appState: AppState
     @FocusState private var isInputFocused: Bool
     @State private var hasCopied: Bool = false
+    @State private var isHoveringRight: Bool = false
 
     private var notchHeight: CGFloat {
         appState.notchTopInset > 0 ? appState.notchTopInset : 32.0
     }
     private let notchWidth: CGFloat = 179.0
-    private let activeWidth: CGFloat = 520.0
-    private let wingWidth: CGFloat = 170.0
+    private let wingWidth: CGFloat = 85.5
+    private var activeWidth: CGFloat {
+        notchWidth + (wingWidth * 2) // Exactly 350.0 pt - compact and clean
+    }
 
     private var promptText: String {
         if !appState.liveTranscript.isEmpty {
@@ -114,11 +117,11 @@ public struct FloatingOverlayView: View {
                                 .foregroundColor(.white)
                         } else if appState.state == .thinking {
                             Text("Thinking...")
-                                .font(.system(size: 13, weight: .medium))
+                                .font(.system(size: 12.5, weight: .medium))
                                 .foregroundColor(.white.opacity(0.9))
                         } else if appState.state == .executing {
                             Text("Executing...")
-                                .font(.system(size: 13, weight: .medium))
+                                .font(.system(size: 12.5, weight: .medium))
                                 .foregroundColor(.white.opacity(0.9))
                         } else if appState.state == .error {
                             Text(appState.errorMessage ?? "Error")
@@ -126,11 +129,9 @@ public struct FloatingOverlayView: View {
                                 .foregroundColor(.red)
                                 .lineLimit(1)
                         } else if !appState.lastResponse.isEmpty {
-                            Text(appState.lastResponse)
-                                .font(.system(size: 12, weight: .medium))
+                            Text("Siap bos")
+                                .font(.system(size: 13, weight: .medium))
                                 .foregroundColor(.white)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
                         } else {
                             Text("Kacung")
                                 .font(.system(size: 13, weight: .medium))
@@ -139,17 +140,17 @@ public struct FloatingOverlayView: View {
 
                         Spacer(minLength: 0)
                     }
-                    .padding(.leading, 14)
+                    .padding(.leading, 12)
                     .frame(width: wingWidth, height: notchHeight)
                     .opacity(appState.isVisibleOnScreen ? 1.0 : 0.0)
-                    .offset(x: appState.isVisibleOnScreen ? 0 : 45)
+                    .offset(x: appState.isVisibleOnScreen ? 0 : 35)
 
                     // Center Gap (Physical Webcam Notch Cutout)
                     Color.clear
                         .frame(width: notchWidth, height: notchHeight)
 
-                    // Right Wing: strictly pure white wave visualizer, no badges, no Mendengarkan text, no x button
-                    HStack(spacing: 8) {
+                    // Right Wing: strictly pure white wave visualizer, or dropdown button when finished
+                    HStack(spacing: 6) {
                         Spacer(minLength: 0)
 
                         if appState.state == .listening {
@@ -164,36 +165,57 @@ public struct FloatingOverlayView: View {
                                 .colorInvert()
                         } else if !appState.lastResponse.isEmpty {
                             Button(action: {
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                appState.cancelAutoDismiss()
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
                                     appState.isOutputExpanded.toggle()
                                 }
                             }) {
-                                Image(systemName: appState.isOutputExpanded ? "chevron.up" : "chevron.down")
-                                    .font(.system(size: 9, weight: .semibold))
-                                    .foregroundColor(.white.opacity(0.7))
-                                    .padding(4)
+                                HStack(spacing: 3) {
+                                    Image(systemName: appState.isOutputExpanded ? "chevron.up" : "chevron.down")
+                                        .font(.system(size: 9.5, weight: .bold))
+                                        .foregroundColor(.white)
+                                }
+                                .frame(width: 26, height: 18)
+                                .background(Color.white.opacity(isHoveringRight ? 0.25 : 0.16))
+                                .clipShape(Capsule())
                             }
                             .buttonStyle(.plain)
+                            .onHover { h in
+                                isHoveringRight = h
+                                if h {
+                                    appState.cancelAutoDismiss()
+                                }
+                            }
                         }
                     }
-                    .padding(.trailing, 14)
+                    .padding(.trailing, 12)
                     .frame(width: wingWidth, height: notchHeight)
                     .opacity(appState.isVisibleOnScreen ? 1.0 : 0.0)
-                    .offset(x: appState.isVisibleOnScreen ? 0 : -45)
+                    .offset(x: appState.isVisibleOnScreen ? 0 : -35)
                 }
                 .frame(height: notchHeight)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if !appState.lastResponse.isEmpty {
+                        appState.cancelAutoDismiss()
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
+                            appState.isOutputExpanded.toggle()
+                        }
+                    }
+                }
 
-                // Optional Expanded Output Card (only when user clicks to see details)
+                // Expanded Output Dropdown Card (revealed when dropdown is clicked)
                 if appState.isOutputExpanded && !appState.lastResponse.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text("Output")
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(.system(size: 10.5, weight: .semibold))
                                 .foregroundColor(.white.opacity(0.6))
 
                             Spacer()
 
                             Button(action: {
+                                appState.cancelAutoDismiss()
                                 let pasteboard = NSPasteboard.general
                                 pasteboard.clearContents()
                                 pasteboard.setString(appState.lastResponse, forType: .string)
@@ -206,25 +228,28 @@ public struct FloatingOverlayView: View {
                                     Image(systemName: hasCopied ? "checkmark" : "doc.on.doc")
                                         .font(.system(size: 9))
                                     Text(hasCopied ? "Disalin" : "Salin")
-                                        .font(.system(size: 9, weight: .medium))
+                                        .font(.system(size: 9.5, weight: .medium))
                                 }
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 2)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
                                 .background(Color.white.opacity(0.12))
-                                .cornerRadius(4)
+                                .cornerRadius(5)
                                 .foregroundColor(hasCopied ? .green : .white)
                             }
                             .buttonStyle(.plain)
 
                             Button(action: {
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
                                     appState.isOutputExpanded = false
                                 }
+                                appState.scheduleAutoDismiss(delay: 4.0)
                             }) {
                                 Image(systemName: "chevron.up")
                                     .font(.system(size: 9, weight: .bold))
-                                    .foregroundColor(.white.opacity(0.6))
-                                    .padding(3)
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .padding(4)
+                                    .background(Color.white.opacity(0.1))
+                                    .clipShape(Circle())
                             }
                             .buttonStyle(.plain)
                         }
@@ -232,19 +257,24 @@ public struct FloatingOverlayView: View {
                         if !promptText.isEmpty {
                             Text("Prompt: \(promptText)")
                                 .font(.system(size: 10, weight: .medium))
-                                .foregroundColor(.white.opacity(0.7))
+                                .foregroundColor(.white.opacity(0.6))
                                 .lineLimit(2)
                         }
 
-                        Text(appState.lastResponse)
-                            .font(.system(size: 11, weight: .regular))
-                            .foregroundColor(.white)
-                            .lineLimit(5)
+                        ScrollView(.vertical, showsIndicators: true) {
+                            Text(appState.lastResponse)
+                                .font(.system(size: 11.5, weight: .regular))
+                                .foregroundColor(.white)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .lineSpacing(3)
+                        }
+                        .frame(maxHeight: 160)
                     }
                     .padding(10)
-                    .background(Color.white.opacity(0.06))
+                    .background(Color.white.opacity(0.08))
                     .cornerRadius(8)
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, 10)
                     .padding(.bottom, 8)
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
@@ -252,16 +282,21 @@ public struct FloatingOverlayView: View {
             .frame(width: appState.isVisibleOnScreen ? activeWidth : notchWidth)
             .clipped()
             .background(
-                DynamicIslandShape(cornerRadius: 10, hasNotch: appState.notchTopInset > 0)
+                DynamicIslandShape(cornerRadius: 12, hasNotch: appState.notchTopInset > 0)
                     .fill(Color.black)
             )
             .overlay(
-                DynamicIslandBorderShape(cornerRadius: 10, hasNotch: appState.notchTopInset > 0)
-                    .stroke(Color.white.opacity(0.12), lineWidth: 0.8)
+                DynamicIslandBorderShape(cornerRadius: 12, hasNotch: appState.notchTopInset > 0)
+                    .stroke(Color.white.opacity(0.14), lineWidth: 0.8)
             )
-            .shadow(color: Color.black.opacity(0.4), radius: 8, x: 0, y: 3)
-            .animation(.spring(response: 0.38, dampingFraction: 0.78), value: appState.isVisibleOnScreen)
-            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: appState.isOutputExpanded)
+            .shadow(color: Color.black.opacity(0.45), radius: 10, x: 0, y: 4)
+            .animation(.spring(response: 0.35, dampingFraction: 0.78), value: appState.isVisibleOnScreen)
+            .animation(.spring(response: 0.35, dampingFraction: 0.78), value: appState.isOutputExpanded)
+            .onHover { hovering in
+                if hovering {
+                    appState.cancelAutoDismiss()
+                }
+            }
 
             Spacer(minLength: 0)
         }

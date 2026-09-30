@@ -89,7 +89,7 @@ public final class AppState: ObservableObject {
         let notchScreen = getNotchScreen()
         let screenFrame = notchScreen.frame
         let windowWidth: CGFloat = 560.0
-        let windowHeight: CGFloat = 240.0
+        let windowHeight: CGFloat = 320.0
         let x = screenFrame.midX - (windowWidth / 2.0)
         let y = screenFrame.maxY - windowHeight
         let targetFrame = NSRect(x: x, y: y, width: windowWidth, height: windowHeight)
@@ -244,7 +244,8 @@ public final class AppState: ObservableObject {
     }
 
     public func startListening() {
-        autoDismissWorkItem?.cancel()
+        cancelAutoDismiss()
+        isOutputExpanded = false
         checkPermissions()
         state = .listening
         liveTranscript = ""
@@ -320,11 +321,12 @@ public final class AppState: ObservableObject {
     }
 
     public func hideOverlay() {
-        autoDismissWorkItem?.cancel()
+        cancelAutoDismiss()
         hideWorkItem?.cancel()
 
         withAnimation(.spring(response: 0.35, dampingFraction: 0.76)) {
             isVisibleOnScreen = false
+            isOutputExpanded = false
         }
 
         let workItem = DispatchWorkItem { [weak self] in
@@ -338,10 +340,17 @@ public final class AppState: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: workItem)
     }
 
-    public func scheduleAutoDismiss(delay: Double = 4.0) {
+    public func cancelAutoDismiss() {
         autoDismissWorkItem?.cancel()
+        autoDismissWorkItem = nil
+    }
+
+    public func scheduleAutoDismiss(delay: Double = 5.0) {
+        cancelAutoDismiss()
+        guard !isOutputExpanded else { return }
         let item = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
+            guard !self.isOutputExpanded else { return }
             // Only auto-dismiss if task completed (idle) or failed (error), never during execution or listening
             if (self.state == .idle || self.state == .error) && self.pendingConfirmation == nil {
                 print("[AppState] Auto-dismissing Notch island back into bezel...")
