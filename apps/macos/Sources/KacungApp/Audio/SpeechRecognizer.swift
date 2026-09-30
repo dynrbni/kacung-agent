@@ -254,6 +254,13 @@ public final class SpeechRecognizer: ObservableObject {
         finishListening()
     }
 
+    public func cancelListening() {
+        guard isListening else { return }
+        print("[SpeechRecognizer] Cancelling listening (prompt discarded).")
+        stopAndCleanUp()
+        liveTranscript = ""
+    }
+
     private func finishListening() {
         guard isListening else { return }
         isListening = false

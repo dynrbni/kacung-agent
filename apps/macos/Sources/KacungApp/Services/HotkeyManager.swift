@@ -7,6 +7,7 @@ public final class HotkeyManager {
     private var globalMonitor: Any?
     private var localMonitor: Any?
     public var onHotkeyTriggered: (() -> Void)?
+    public var onHotkeyReleased: (() -> Void)?
 
     private var isControlOptionActive = false
     private var lastTriggerTime: TimeInterval = 0
@@ -63,7 +64,13 @@ public final class HotkeyManager {
                     return true
                 }
             } else {
-                isControlOptionActive = false
+                if isControlOptionActive {
+                    isControlOptionActive = false
+                    print("[HotkeyManager] Control + Option released!")
+                    DispatchQueue.main.async { [weak self] in
+                        self?.onHotkeyReleased?()
+                    }
+                }
             }
             return false
         }

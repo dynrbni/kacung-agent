@@ -104,124 +104,79 @@ public struct FloatingOverlayView: View {
     public var body: some View {
         VStack(spacing: 0) {
             VStack(spacing: 0) {
-                // Main Horizontal Notch Bar (flushed with physical notch height)
+                // Main Horizontal Notch Bar
                 HStack(spacing: 0) {
-                    // Left Wing (Left of camera notch)
-                    HStack(spacing: 7) {
-                        ZStack {
-                            Circle()
-                                .fill(stateColor.opacity(0.3))
-                                .frame(width: 18, height: 18)
-
-                            Circle()
-                                .stroke(stateColor, lineWidth: 1.5)
-                                .scaleEffect(appState.state == .listening ? (1.0 + CGFloat(appState.audioLevel * 0.35)) : 1.0)
-                                .animation(.easeOut(duration: 0.1), value: appState.audioLevel)
-
-                            Image(systemName: stateIconName)
-                                .font(.system(size: 8.5, weight: .bold))
-                                .foregroundColor(stateColor)
-                        }
-
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text("KACUNG")
-                                .font(.system(size: 7.5, weight: .black, design: .rounded))
-                                .foregroundColor(.gray)
-
-                            Text(appState.state.title)
-                                .font(.system(size: 10, weight: .semibold))
+                    // Left Wing: strictly clean SF Pro text, no icons, no colored badges
+                    HStack {
+                        if appState.state == .listening {
+                            Text("Listening")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(.white)
+                        } else if appState.state == .thinking {
+                            Text("Thinking...")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(.white.opacity(0.9))
+                        } else if appState.state == .executing {
+                            Text("Executing...")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(.white.opacity(0.9))
+                        } else if appState.state == .error {
+                            Text(appState.errorMessage ?? "Error")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.red)
+                                .lineLimit(1)
+                        } else if !appState.lastResponse.isEmpty {
+                            Text(appState.lastResponse)
+                                .font(.system(size: 12, weight: .medium))
                                 .foregroundColor(.white)
                                 .lineLimit(1)
+                                .truncationMode(.tail)
+                        } else {
+                            Text("Kacung")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(.white.opacity(0.8))
                         }
 
                         Spacer(minLength: 0)
                     }
-                    .padding(.leading, 12)
+                    .padding(.leading, 14)
                     .frame(width: wingWidth, height: notchHeight)
                     .opacity(appState.isVisibleOnScreen ? 1.0 : 0.0)
                     .offset(x: appState.isVisibleOnScreen ? 0 : 45)
 
-                    // Center Gap (Directly over physical webcam notch cutout)
+                    // Center Gap (Physical Webcam Notch Cutout)
                     Color.clear
                         .frame(width: notchWidth, height: notchHeight)
 
-                    // Right Wing (Right of camera notch)
-                    HStack(spacing: 6) {
+                    // Right Wing: strictly pure white wave visualizer, no badges, no Mendengarkan text, no x button
+                    HStack(spacing: 8) {
                         Spacer(minLength: 0)
 
-                        // Real-time transcribed speech text or status
                         if appState.state == .listening {
-                            if !appState.liveTranscript.isEmpty {
-                                Text("\"\(appState.liveTranscript)\"")
-                                    .font(.system(size: 9.5, weight: .medium, design: .rounded))
-                                    .foregroundColor(.cyan)
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
-                                    .frame(maxWidth: 70)
-                            } else {
-                                Text("Mendengarkan...")
-                                    .font(.system(size: 9.5, weight: .medium))
-                                    .foregroundColor(.gray)
-                            }
+                            // Only white wave visualizer
+                            NotchAudioWaveView(
+                                audioLevel: appState.audioLevel,
+                                isListening: true
+                            )
                         } else if appState.state == .thinking || appState.state == .executing {
-                            HStack(spacing: 4) {
-                                ProgressView()
-                                    .controlSize(.mini)
-                                Text(appState.state == .executing ? "Jalan..." : "Proses...")
-                                    .font(.system(size: 9.5, weight: .medium))
-                                    .foregroundColor(.purple)
-                            }
-                        } else if !appState.lastResponse.isEmpty && !appState.isOutputExpanded {
+                            ProgressView()
+                                .controlSize(.mini)
+                                .colorInvert()
+                        } else if !appState.lastResponse.isEmpty {
                             Button(action: {
                                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                    appState.isOutputExpanded = true
+                                    appState.isOutputExpanded.toggle()
                                 }
                             }) {
-                                HStack(spacing: 3) {
-                                    Text(appState.lastResponse)
-                                        .font(.system(size: 9.5))
-                                        .foregroundColor(.white.opacity(0.9))
-                                        .lineLimit(1)
-                                        .truncationMode(.tail)
-                                        .frame(maxWidth: 75)
-                                    Image(systemName: "chevron.down")
-                                        .font(.system(size: 7, weight: .bold))
-                                        .foregroundColor(.cyan.opacity(0.8))
-                                }
+                                Image(systemName: appState.isOutputExpanded ? "chevron.up" : "chevron.down")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .padding(4)
                             }
                             .buttonStyle(.plain)
                         }
-
-                        // Right-side voice wave visualizer
-                        if appState.state == .listening || appState.audioLevel > 0.04 {
-                            NotchAudioWaveView(
-                                audioLevel: appState.audioLevel,
-                                isListening: appState.state == .listening
-                            )
-                            .transition(.scale.combined(with: .opacity))
-                        }
-
-                        // Hotkey badge
-                        Text("⌃⌥")
-                            .font(.system(size: 9, weight: .bold, design: .monospaced))
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 2)
-                            .background(Color.white.opacity(0.12))
-                            .cornerRadius(3.5)
-                            .foregroundColor(.white.opacity(0.75))
-
-                        // Dismiss button
-                        Button(action: {
-                            appState.hideOverlay()
-                        }) {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 8, weight: .bold))
-                                .foregroundColor(.gray)
-                                .padding(2)
-                        }
-                        .buttonStyle(.plain)
                     }
-                    .padding(.trailing, 10)
+                    .padding(.trailing, 14)
                     .frame(width: wingWidth, height: notchHeight)
                     .opacity(appState.isVisibleOnScreen ? 1.0 : 0.0)
                     .offset(x: appState.isVisibleOnScreen ? 0 : -45)
@@ -232,9 +187,9 @@ public struct FloatingOverlayView: View {
                 if appState.isOutputExpanded && !appState.lastResponse.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
-                            Label("Detail Perintah", systemImage: "text.bubble.fill")
+                            Text("Output")
                                 .font(.system(size: 10, weight: .semibold))
-                                .foregroundColor(.cyan)
+                                .foregroundColor(.white.opacity(0.6))
 
                             Spacer()
 
@@ -250,7 +205,7 @@ public struct FloatingOverlayView: View {
                                 HStack(spacing: 3) {
                                     Image(systemName: hasCopied ? "checkmark" : "doc.on.doc")
                                         .font(.system(size: 9))
-                                    Text(hasCopied ? "Disalin!" : "Salin")
+                                    Text(hasCopied ? "Disalin" : "Salin")
                                         .font(.system(size: 9, weight: .medium))
                                 }
                                 .padding(.horizontal, 5)
@@ -268,28 +223,28 @@ public struct FloatingOverlayView: View {
                             }) {
                                 Image(systemName: "chevron.up")
                                     .font(.system(size: 9, weight: .bold))
-                                    .foregroundColor(.gray)
+                                    .foregroundColor(.white.opacity(0.6))
                                     .padding(3)
                             }
                             .buttonStyle(.plain)
                         }
 
                         if !promptText.isEmpty {
-                            Text("PROMPT: \(promptText)")
+                            Text("Prompt: \(promptText)")
                                 .font(.system(size: 10, weight: .medium))
-                                .foregroundColor(.cyan.opacity(0.9))
+                                .foregroundColor(.white.opacity(0.7))
                                 .lineLimit(2)
                         }
 
                         Text(appState.lastResponse)
-                            .font(.system(size: 11))
+                            .font(.system(size: 11, weight: .regular))
                             .foregroundColor(.white)
-                            .lineLimit(4)
+                            .lineLimit(5)
                     }
                     .padding(10)
                     .background(Color.white.opacity(0.06))
                     .cornerRadius(8)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 14)
                     .padding(.bottom, 8)
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
@@ -314,28 +269,6 @@ public struct FloatingOverlayView: View {
         .edgesIgnoringSafeArea(.all)
         .onAppear {
             isInputFocused = true
-        }
-    }
-
-    private var stateColor: Color {
-        switch appState.state {
-        case .idle: return .blue
-        case .listening: return .cyan
-        case .thinking: return .purple
-        case .executing: return .orange
-        case .speaking: return .green
-        case .error: return .red
-        }
-    }
-
-    private var stateIconName: String {
-        switch appState.state {
-        case .idle: return "sparkles"
-        case .listening: return "waveform"
-        case .thinking: return "brain"
-        case .executing: return "gearshape.arrow.triangle.2.circlepath"
-        case .speaking: return "speaker.wave.2.fill"
-        case .error: return "exclamationmark.triangle.fill"
         }
     }
 }

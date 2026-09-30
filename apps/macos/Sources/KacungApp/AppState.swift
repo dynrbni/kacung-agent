@@ -126,14 +126,14 @@ public final class AppState: ObservableObject {
             self?.showOverlay()
         }
 
-        client.onSpeechStart = { [weak self] text in
-            self?.state = .speaking
-            self?.speechSynthesizer.speak(text: text)
+        client.onSpeechStart = { [weak self] _ in
+            // User explicitly requested no robot voice - completely silent operation!
+            self?.state = .idle
         }
 
         client.onSpeechEnd = { [weak self] _ in
             self?.state = .idle
-            self?.scheduleAutoDismiss(delay: 1.8)
+            self?.scheduleAutoDismiss(delay: 4.0)
         }
 
         client.onError = { [weak self] errorMsg in
@@ -208,17 +208,34 @@ public final class AppState: ObservableObject {
         hotkey.onHotkeyTriggered = { [weak self] in
             self?.handleHotkeyWake()
         }
+        hotkey.onHotkeyReleased = { [weak self] in
+            self?.handleHotkeyRelease()
+        }
         hotkey.registerHotkey()
+    }
+
+    public func handleHotkeyRelease() {
+        if state == .listening {
+            print("[AppState] Control + Option released while listening. Discarding prompt and hiding notch.")
+            speechRecognizer.cancelListening()
+            state = .idle
+            liveTranscript = ""
+            inputText = ""
+            hideOverlay()
+        }
     }
 
     public func handleHotkeyWake() {
         autoDismissWorkItem?.cancel()
         if isVisibleOnScreen {
             // Dismiss immediately if user taps hotkey while active
-            hideOverlay()
             if state == .listening {
-                speechRecognizer.stopListening()
+                speechRecognizer.cancelListening()
+                state = .idle
+                liveTranscript = ""
+                inputText = ""
             }
+            hideOverlay()
         } else {
             // Summon from notch and listen immediately
             showOverlay()

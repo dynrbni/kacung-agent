@@ -26,20 +26,10 @@ public struct NotchAudioWaveView: View {
                     let clampedHeight = min(max(dynamicHeight, 3.0), 16.0)
 
                     Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color(red: 0.2, green: 0.85, blue: 1.0), // Neon Cyan
-                                    Color(red: 0.45, green: 0.4, blue: 1.0), // Vibrant Purple
-                                    Color(red: 0.9, green: 0.25, blue: 0.95) // Siri Magenta
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
+                        .fill(Color.white)
                         .frame(width: 2.5, height: clampedHeight)
                         .shadow(
-                            color: Color.cyan.opacity(Double(audioLevel) * 0.8 + (isListening ? 0.3 : 0.0)),
+                            color: Color.white.opacity(Double(audioLevel) * 0.4 + (isListening ? 0.2 : 0.0)),
                             radius: 2,
                             x: 0,
                             y: 0
