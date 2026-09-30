@@ -210,4 +210,11 @@ public final class AgentClient: ObservableObject {
         request.httpMethod = "POST"
         urlSession.dataTask(with: request).resume()
     }
+
+    public func sendCancel() {
+        let endpoint = baseURL.appendingPathComponent("cancel")
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        urlSession.dataTask(with: request).resume()
+    }
 }

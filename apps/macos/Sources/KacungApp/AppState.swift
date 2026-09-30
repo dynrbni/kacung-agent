@@ -311,6 +311,27 @@ public final class AppState: ObservableObject {
         pendingConfirmation = nil
     }
 
+    /// Cancel the currently running task and return to idle.
+    /// Called by the cancel button in the notch UI during thinking/executing states.
+    public func cancelCurrentTask() {
+        print("[AppState] User cancelled current task")
+        speechRecognizer.cancelListening()
+        // Send cancel signal to agent server
+        client.sendCancel()
+        // Briefly show "Cancelled" status before returning to idle
+        state = .error
+        errorMessage = "Cancelled"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard let self = self else { return }
+            if self.errorMessage == "Cancelled" {
+                self.state = .idle
+                self.errorMessage = nil
+                self.scheduleAutoDismiss(delay: 3.0)
+            }
+        }
+    }
+
+
     public func toggleOverlay() {
         if isVisibleOnScreen {
             hideOverlay()

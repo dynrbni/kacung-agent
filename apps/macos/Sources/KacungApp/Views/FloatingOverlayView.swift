@@ -1,64 +1,27 @@
 import SwiftUI
 
+// MARK: - Dynamic Island Shape
+
+/// A capsule shape with flat top edge (merges into the MacBook notch bezel)
+/// and rounded bottom corners. This gives the illusion that the notch itself
+/// is expanding downward.
 struct DynamicIslandShape: Shape {
-    var cornerRadius: CGFloat = 10
-    var hasNotch: Bool = true
+    var cornerRadius: CGFloat = 22
 
     func path(in rect: CGRect) -> Path {
-        if !hasNotch {
-            return RoundedRectangle(cornerRadius: cornerRadius).path(in: rect)
-        }
         var path = Path()
-        // Top-left at bezel
+        // Top-left — flush with bezel
         path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        // Top edge flush with screen top
+        // Top edge
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        // Right edge down to bottom-right corner
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - cornerRadius))
-        // Bottom-right rounded corner
-        path.addArc(
-            center: CGPoint(x: rect.maxX - cornerRadius, y: rect.maxY - cornerRadius),
-            radius: cornerRadius,
-            startAngle: Angle(degrees: 0),
-            endAngle: Angle(degrees: 90),
-            clockwise: false
-        )
-        // Bottom edge
-        path.addLine(to: CGPoint(x: rect.minX + cornerRadius, y: rect.maxY))
-        // Bottom-left rounded corner
-        path.addArc(
-            center: CGPoint(x: rect.minX + cornerRadius, y: rect.maxY - cornerRadius),
-            radius: cornerRadius,
-            startAngle: Angle(degrees: 90),
-            endAngle: Angle(degrees: 180),
-            clockwise: false
-        )
-        // Left edge back to top-left
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
-        path.closeSubpath()
-        return path
-    }
-}
-
-struct DynamicIslandBorderShape: Shape {
-    var cornerRadius: CGFloat = 10
-    var hasNotch: Bool = true
-
-    func path(in rect: CGRect) -> Path {
-        if !hasNotch {
-            return RoundedRectangle(cornerRadius: cornerRadius).path(in: rect)
-        }
-        var path = Path()
-        // Start at top-right
-        path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
-        // Down right side
+        // Right edge down to bottom-right arc start
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - cornerRadius))
         // Bottom-right corner
         path.addArc(
             center: CGPoint(x: rect.maxX - cornerRadius, y: rect.maxY - cornerRadius),
             radius: cornerRadius,
-            startAngle: Angle(degrees: 0),
-            endAngle: Angle(degrees: 90),
+            startAngle: .degrees(0),
+            endAngle: .degrees(90),
             clockwise: false
         )
         // Bottom edge
@@ -67,16 +30,141 @@ struct DynamicIslandBorderShape: Shape {
         path.addArc(
             center: CGPoint(x: rect.minX + cornerRadius, y: rect.maxY - cornerRadius),
             radius: cornerRadius,
-            startAngle: Angle(degrees: 90),
-            endAngle: Angle(degrees: 180),
+            startAngle: .degrees(90),
+            endAngle: .degrees(180),
             clockwise: false
         )
-        // Up left side to top-left
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
-        // Top edge remains open so it merges seamlessly into the black bezel
+        // Left edge back to top
+        path.closeSubpath()
         return path
     }
 }
+
+/// Border shape — identical to DynamicIslandShape but with the top edge open
+/// so the border doesn't draw across the bezel line.
+struct DynamicIslandBorderShape: Shape {
+    var cornerRadius: CGFloat = 22
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        // Start at top-right
+        path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
+        // Right edge
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - cornerRadius))
+        // Bottom-right corner
+        path.addArc(
+            center: CGPoint(x: rect.maxX - cornerRadius, y: rect.maxY - cornerRadius),
+            radius: cornerRadius,
+            startAngle: .degrees(0),
+            endAngle: .degrees(90),
+            clockwise: false
+        )
+        // Bottom edge
+        path.addLine(to: CGPoint(x: rect.minX + cornerRadius, y: rect.maxY))
+        // Bottom-left corner
+        path.addArc(
+            center: CGPoint(x: rect.minX + cornerRadius, y: rect.maxY - cornerRadius),
+            radius: cornerRadius,
+            startAngle: .degrees(90),
+            endAngle: .degrees(180),
+            clockwise: false
+        )
+        // Left edge back to top
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        // Top edge open
+        return path
+    }
+}
+
+// MARK: - Notch Layout Configuration
+
+/// Centralized state-to-layout mapping. Every visual property of the notch
+/// is derived from the current `NotchLayoutMode`.
+enum NotchLayoutMode: Equatable {
+    case compact      // idle / completed — small pill
+    case listening    // voice input active
+    case expanded     // thinking / executing — wider + taller
+    case dropdown     // output expanded — full panel
+
+    var width: CGFloat {
+        switch self {
+        case .compact:   return 350
+        case .listening: return 350
+        case .expanded:  return 400
+        case .dropdown:  return 420
+        }
+    }
+
+    var height: CGFloat {
+        switch self {
+        case .compact:   return 36
+        case .listening: return 36
+        case .expanded:  return 48
+        case .dropdown:  return 48 // content height is additive below
+        }
+    }
+
+    var cornerRadius: CGFloat {
+        // Always pill-shaped: radius ≈ height/2
+        return height / 2.0
+    }
+}
+
+// MARK: - Subtle Activity Pulse
+
+/// A very subtle pulsing overlay used during thinking/executing states
+/// to communicate that the agent is actively working.
+struct ActivityPulseView: View {
+    @State private var isPulsing = false
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 24)
+            .fill(
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color.white.opacity(isPulsing ? 0.06 : 0.0),
+                        Color.white.opacity(0.0),
+                        Color.white.opacity(isPulsing ? 0.04 : 0.0),
+                    ]),
+                    startPoint: isPulsing ? .leading : .trailing,
+                    endPoint: isPulsing ? .trailing : .leading
+                )
+            )
+            .onAppear {
+                withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
+                    isPulsing = true
+                }
+            }
+    }
+}
+
+// MARK: - Cancel Button
+
+struct NotchCancelButton: View {
+    let action: () -> Void
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(.white.opacity(isHovering ? 1.0 : 0.6))
+                .frame(width: 22, height: 22)
+                .background(Color.white.opacity(isHovering ? 0.22 : 0.12))
+                .clipShape(Circle())
+                .scaleEffect(isHovering ? 1.08 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.15)) {
+                isHovering = hovering
+            }
+        }
+        .help("Cancel")
+    }
+}
+
+// MARK: - Floating Overlay View
 
 public struct FloatingOverlayView: View {
     @ObservedObject public var appState: AppState
@@ -84,13 +172,40 @@ public struct FloatingOverlayView: View {
     @State private var hasCopied: Bool = false
     @State private var isHoveringRight: Bool = false
 
+    // Physical notch dimensions
     private var notchHeight: CGFloat {
         appState.notchTopInset > 0 ? appState.notchTopInset : 32.0
     }
-    private let notchWidth: CGFloat = 179.0
-    private let wingWidth: CGFloat = 85.5
-    private var activeWidth: CGFloat {
-        notchWidth + (wingWidth * 2) // Exactly 350.0 pt - compact and clean
+    private let physicalNotchWidth: CGFloat = 179.0
+
+    // Determine layout mode from state
+    private var layoutMode: NotchLayoutMode {
+        if appState.isOutputExpanded && !appState.lastResponse.isEmpty {
+            return .dropdown
+        }
+        switch appState.state {
+        case .listening:
+            return .listening
+        case .thinking, .executing:
+            return .expanded
+        case .error:
+            return .expanded
+        default:
+            return .compact
+        }
+    }
+
+    // Whether to show the cancel button
+    private var showCancelButton: Bool {
+        appState.state == .thinking || appState.state == .executing
+    }
+
+    // Whether the notch is in an "active" (non-compact) visual state
+    private var isActiveState: Bool {
+        appState.state == .listening ||
+        appState.state == .thinking ||
+        appState.state == .executing ||
+        appState.state == .error
     }
 
     private var promptText: String {
@@ -100,200 +215,74 @@ public struct FloatingOverlayView: View {
         return appState.inputText
     }
 
+    // Wing width adapts to layout mode
+    private var wingWidth: CGFloat {
+        return (layoutMode.width - physicalNotchWidth) / 2.0
+    }
+
+    // The current bar height (between the notch physical height and the expanded height)
+    private var barHeight: CGFloat {
+        max(layoutMode.height, notchHeight)
+    }
+
+    // Spring animation used for all layout transitions
+    private let layoutSpring = Animation.spring(response: 0.4, dampingFraction: 0.82)
+
     public init(appState: AppState) {
         self.appState = appState
     }
 
     public var body: some View {
         VStack(spacing: 0) {
+            // The Dynamic Island surface
             VStack(spacing: 0) {
                 // Main Horizontal Notch Bar
-                HStack(spacing: 0) {
-                    // Left Wing: strictly clean SF Pro text, no icons, no colored badges
-                    HStack {
-                        if appState.state == .listening {
-                            Text(appState.liveTranscript.isEmpty ? "Listening" : appState.liveTranscript)
-                                .font(.system(size: 12.5, weight: .medium))
-                                .foregroundColor(.white)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                        } else if appState.state == .thinking {
-                            Text("Thinking...")
-                                .font(.system(size: 12.5, weight: .medium))
-                                .foregroundColor(.white.opacity(0.9))
-                        } else if appState.state == .executing {
-                            Text("Executing...")
-                                .font(.system(size: 12.5, weight: .medium))
-                                .foregroundColor(.white.opacity(0.9))
-                        } else if appState.state == .error {
-                            Text(appState.errorMessage ?? "Error")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.red)
-                                .lineLimit(1)
-                        } else if !appState.lastResponse.isEmpty {
-                            Text("Siap bos")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(.white)
-                        } else {
-                            Text("Kacung")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(.white.opacity(0.8))
-                        }
-
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.leading, 12)
-                    .frame(width: wingWidth, height: notchHeight)
-                    .opacity(appState.isVisibleOnScreen ? 1.0 : 0.0)
-                    .offset(x: appState.isVisibleOnScreen ? 0 : 35)
-
-                    // Center Gap (Physical Webcam Notch Cutout)
-                    Color.clear
-                        .frame(width: notchWidth, height: notchHeight)
-
-                    // Right Wing: strictly pure white wave visualizer, or dropdown button when finished
-                    HStack(spacing: 6) {
-                        Spacer(minLength: 0)
-
-                        if appState.state == .listening {
-                            // Only white wave visualizer
-                            NotchAudioWaveView(
-                                audioLevel: appState.audioLevel,
-                                isListening: true
-                            )
-                        } else if appState.state == .thinking || appState.state == .executing {
-                            ProgressView()
-                                .controlSize(.mini)
-                                .colorInvert()
-                        } else if !appState.lastResponse.isEmpty {
-                            Button(action: {
-                                appState.cancelAutoDismiss()
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
-                                    appState.isOutputExpanded.toggle()
-                                }
-                            }) {
-                                HStack(spacing: 3) {
-                                    Image(systemName: appState.isOutputExpanded ? "chevron.up" : "chevron.down")
-                                        .font(.system(size: 9.5, weight: .bold))
-                                        .foregroundColor(.white)
-                                }
-                                .frame(width: 26, height: 18)
-                                .background(Color.white.opacity(isHoveringRight ? 0.25 : 0.16))
-                                .clipShape(Capsule())
-                            }
-                            .buttonStyle(.plain)
-                            .onHover { h in
-                                isHoveringRight = h
-                                if h {
-                                    appState.cancelAutoDismiss()
-                                }
+                notchBar
+                    .frame(height: barHeight)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if !appState.lastResponse.isEmpty && appState.state == .idle {
+                            appState.cancelAutoDismiss()
+                            withAnimation(layoutSpring) {
+                                appState.isOutputExpanded.toggle()
                             }
                         }
                     }
-                    .padding(.trailing, 12)
-                    .frame(width: wingWidth, height: notchHeight)
-                    .opacity(appState.isVisibleOnScreen ? 1.0 : 0.0)
-                    .offset(x: appState.isVisibleOnScreen ? 0 : -35)
-                }
-                .frame(height: notchHeight)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    if !appState.lastResponse.isEmpty {
-                        appState.cancelAutoDismiss()
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
-                            appState.isOutputExpanded.toggle()
-                        }
-                    }
-                }
 
-                // Expanded Output Dropdown Card (revealed when dropdown is clicked)
+                // Expanded Output Panel
                 if appState.isOutputExpanded && !appState.lastResponse.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Output")
-                                .font(.system(size: 10.5, weight: .semibold))
-                                .foregroundColor(.white.opacity(0.6))
-
-                            Spacer()
-
-                            Button(action: {
-                                appState.cancelAutoDismiss()
-                                let pasteboard = NSPasteboard.general
-                                pasteboard.clearContents()
-                                pasteboard.setString(appState.lastResponse, forType: .string)
-                                hasCopied = true
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                                    hasCopied = false
-                                }
-                            }) {
-                                HStack(spacing: 3) {
-                                    Image(systemName: hasCopied ? "checkmark" : "doc.on.doc")
-                                        .font(.system(size: 9))
-                                    Text(hasCopied ? "Disalin" : "Salin")
-                                        .font(.system(size: 9.5, weight: .medium))
-                                }
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 3)
-                                .background(Color.white.opacity(0.12))
-                                .cornerRadius(5)
-                                .foregroundColor(hasCopied ? .green : .white)
-                            }
-                            .buttonStyle(.plain)
-
-                            Button(action: {
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.78)) {
-                                    appState.isOutputExpanded = false
-                                }
-                                appState.scheduleAutoDismiss(delay: 4.0)
-                            }) {
-                                Image(systemName: "chevron.up")
-                                    .font(.system(size: 9, weight: .bold))
-                                    .foregroundColor(.white.opacity(0.7))
-                                    .padding(4)
-                                    .background(Color.white.opacity(0.1))
-                                    .clipShape(Circle())
-                            }
-                            .buttonStyle(.plain)
-                        }
-
-                        if !promptText.isEmpty {
-                            Text("Prompt: \(promptText)")
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundColor(.white.opacity(0.6))
-                                .lineLimit(2)
-                        }
-
-                        ScrollView(.vertical, showsIndicators: true) {
-                            Text(appState.lastResponse)
-                                .font(.system(size: 11.5, weight: .regular))
-                                .foregroundColor(.white)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .lineSpacing(3)
-                        }
-                        .frame(maxHeight: 160)
-                    }
-                    .padding(10)
-                    .background(Color.white.opacity(0.08))
-                    .cornerRadius(8)
-                    .padding(.horizontal, 10)
-                    .padding(.bottom, 8)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    expandedOutputPanel
+                        .transition(
+                            .asymmetric(
+                                insertion: .opacity.combined(with: .move(edge: .top)).animation(.easeOut(duration: 0.25)),
+                                removal: .opacity.animation(.easeIn(duration: 0.18))
+                            )
+                        )
                 }
             }
-            .frame(width: appState.isVisibleOnScreen ? activeWidth : notchWidth)
+            .frame(width: appState.isVisibleOnScreen ? layoutMode.width : physicalNotchWidth)
             .clipped()
             .background(
-                DynamicIslandShape(cornerRadius: 12, hasNotch: appState.notchTopInset > 0)
-                    .fill(Color.black)
+                ZStack {
+                    DynamicIslandShape(cornerRadius: layoutMode.cornerRadius)
+                        .fill(Color.black)
+
+                    // Subtle activity pulse during thinking/executing
+                    if appState.state == .thinking || appState.state == .executing {
+                        ActivityPulseView()
+                            .clipShape(DynamicIslandShape(cornerRadius: layoutMode.cornerRadius))
+                            .transition(.opacity.animation(.easeInOut(duration: 0.3)))
+                    }
+                }
             )
             .overlay(
-                DynamicIslandBorderShape(cornerRadius: 12, hasNotch: appState.notchTopInset > 0)
-                    .stroke(Color.white.opacity(0.14), lineWidth: 0.8)
+                DynamicIslandBorderShape(cornerRadius: layoutMode.cornerRadius)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 0.6)
             )
-            .shadow(color: Color.black.opacity(0.45), radius: 10, x: 0, y: 4)
-            .animation(.spring(response: 0.35, dampingFraction: 0.78), value: appState.isVisibleOnScreen)
-            .animation(.spring(response: 0.35, dampingFraction: 0.78), value: appState.isOutputExpanded)
+            .shadow(color: Color.black.opacity(0.5), radius: 12, x: 0, y: 5)
+            .animation(layoutSpring, value: layoutMode)
+            .animation(layoutSpring, value: appState.isVisibleOnScreen)
+            .animation(layoutSpring, value: appState.isOutputExpanded)
             .onHover { hovering in
                 if hovering {
                     appState.cancelAutoDismiss()
@@ -307,5 +296,235 @@ public struct FloatingOverlayView: View {
         .onAppear {
             isInputFocused = true
         }
+    }
+
+    // MARK: - Notch Bar Content
+
+    private var notchBar: some View {
+        HStack(spacing: 0) {
+            // Left Wing — status text
+            leftWing
+                .padding(.leading, 14)
+                .frame(width: wingWidth, alignment: .leading)
+                .opacity(appState.isVisibleOnScreen ? 1.0 : 0.0)
+                .offset(x: appState.isVisibleOnScreen ? 0 : 30)
+
+            // Center Gap (physical webcam notch cutout)
+            Color.clear
+                .frame(width: physicalNotchWidth, height: notchHeight)
+
+            // Right Wing — controls / wave / spinner
+            rightWing
+                .padding(.trailing, 14)
+                .frame(width: wingWidth, alignment: .trailing)
+                .opacity(appState.isVisibleOnScreen ? 1.0 : 0.0)
+                .offset(x: appState.isVisibleOnScreen ? 0 : -30)
+        }
+    }
+
+    // MARK: - Left Wing (Status Label)
+
+    private var leftWing: some View {
+        HStack {
+            Group {
+                switch appState.state {
+                case .listening:
+                    Text(appState.liveTranscript.isEmpty ? "Listening" : appState.liveTranscript)
+                        .font(.system(size: 12.5, weight: .medium, design: .default))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .id("listening-\(appState.liveTranscript.isEmpty)")
+
+                case .thinking:
+                    Text("Thinking...")
+                        .font(.system(size: 12.5, weight: .medium, design: .default))
+                        .foregroundColor(.white.opacity(0.9))
+                        .id("thinking")
+
+                case .executing:
+                    Text("Executing...")
+                        .font(.system(size: 12.5, weight: .medium, design: .default))
+                        .foregroundColor(.white.opacity(0.9))
+                        .id("executing")
+
+                case .error:
+                    Text(appState.errorMessage ?? "Error")
+                        .font(.system(size: 11.5, weight: .medium, design: .default))
+                        .foregroundColor(Color(red: 1.0, green: 0.45, blue: 0.45))
+                        .lineLimit(1)
+                        .id("error")
+
+                default:
+                    if !appState.lastResponse.isEmpty {
+                        Text("Siap bos")
+                            .font(.system(size: 13, weight: .medium, design: .default))
+                            .foregroundColor(.white)
+                            .id("siap-bos")
+                    } else {
+                        Text("Kacung")
+                            .font(.system(size: 13, weight: .medium, design: .default))
+                            .foregroundColor(.white.opacity(0.7))
+                            .id("kacung")
+                    }
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: appState.state)
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    // MARK: - Right Wing (Controls)
+
+    private var rightWing: some View {
+        HStack(spacing: 8) {
+            Spacer(minLength: 0)
+
+            Group {
+                switch appState.state {
+                case .listening:
+                    // Pure white audio wave
+                    NotchAudioWaveView(
+                        audioLevel: appState.audioLevel,
+                        isListening: true
+                    )
+                    .transition(.opacity.animation(.easeOut(duration: 0.2)))
+
+                case .thinking, .executing:
+                    // Compact activity indicator + cancel button
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .scaleEffect(0.85)
+                            .colorInvert()
+
+                        NotchCancelButton {
+                            appState.cancelCurrentTask()
+                        }
+                        .transition(.scale(scale: 0.5).combined(with: .opacity))
+                    }
+                    .transition(.opacity.animation(.easeOut(duration: 0.2)))
+
+                case .error:
+                    // Error dismiss
+                    NotchCancelButton {
+                        withAnimation(layoutSpring) {
+                            appState.state = .idle
+                            appState.errorMessage = nil
+                        }
+                        appState.scheduleAutoDismiss(delay: 3.0)
+                    }
+                    .transition(.opacity.animation(.easeOut(duration: 0.2)))
+
+                default:
+                    if !appState.lastResponse.isEmpty {
+                        // Dropdown toggle button
+                        Button(action: {
+                            appState.cancelAutoDismiss()
+                            withAnimation(layoutSpring) {
+                                appState.isOutputExpanded.toggle()
+                            }
+                        }) {
+                            Image(systemName: appState.isOutputExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.white)
+                                .frame(width: 24, height: 18)
+                                .background(Color.white.opacity(isHoveringRight ? 0.25 : 0.14))
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .onHover { h in
+                            isHoveringRight = h
+                            if h { appState.cancelAutoDismiss() }
+                        }
+                        .transition(.opacity.animation(.easeOut(duration: 0.2)))
+                    }
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: appState.state)
+        }
+    }
+
+    // MARK: - Expanded Output Panel
+
+    private var expandedOutputPanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Header: Output label + Copy + Collapse
+            HStack {
+                Text("Output")
+                    .font(.system(size: 10.5, weight: .semibold, design: .default))
+                    .foregroundColor(.white.opacity(0.5))
+
+                Spacer()
+
+                // Copy button
+                Button(action: {
+                    appState.cancelAutoDismiss()
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString(appState.lastResponse, forType: .string)
+                    hasCopied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        hasCopied = false
+                    }
+                }) {
+                    HStack(spacing: 3) {
+                        Image(systemName: hasCopied ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 9))
+                        Text(hasCopied ? "Disalin" : "Salin")
+                            .font(.system(size: 9.5, weight: .medium))
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3.5)
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(5)
+                    .foregroundColor(hasCopied ? .green : .white.opacity(0.8))
+                }
+                .buttonStyle(.plain)
+
+                // Collapse button
+                Button(action: {
+                    withAnimation(layoutSpring) {
+                        appState.isOutputExpanded = false
+                    }
+                    appState.scheduleAutoDismiss(delay: 4.0)
+                }) {
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.white.opacity(0.6))
+                        .padding(5)
+                        .background(Color.white.opacity(0.1))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+
+            // Prompt echo
+            if !promptText.isEmpty {
+                Text("Prompt: \(promptText)")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.white.opacity(0.45))
+                    .lineLimit(2)
+            }
+
+            // Response body
+            ScrollView(.vertical, showsIndicators: true) {
+                Text(appState.lastResponse)
+                    .font(.system(size: 11.5, weight: .regular))
+                    .foregroundColor(.white.opacity(0.95))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .lineSpacing(3)
+            }
+            .frame(maxHeight: 160)
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 4)
+        .padding(.bottom, 10)
+        .background(Color.white.opacity(0.06))
+        .cornerRadius(10)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 10)
     }
 }
