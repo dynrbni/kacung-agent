@@ -1,6 +1,11 @@
 import AppKit
 import SwiftUI
 
+final class NotchPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
@@ -11,17 +16,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Setup menu bar icon
         setupStatusItem()
 
-        // Setup floating Siri-style overlay window
+        // Setup floating Dynamic Island Notch overlay window
         setupFloatingOverlay()
 
         // Register AppState window reference
         AppState.shared.overlayWindow = overlayPanel
 
-        // Show overlay and start listening on initial launch
-        AppState.shared.showOverlay()
-        AppState.shared.startListening()
+        // Start quietly in background; overlay only appears on Control + Option hotkey trigger
+        AppState.shared.hideOverlay()
 
-        print("Kacung macOS application initialized successfully and is listening.")
+        print("Kacung macOS application initialized successfully in background. Press Control+Option to summon.")
     }
 
     private func setupStatusItem() {
@@ -50,30 +54,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupFloatingOverlay() {
-        let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 440, height: 540),
+        let defaultWidth: CGFloat = 400
+        let defaultHeight: CGFloat = 60
+
+        let panel = NotchPanel(
+            contentRect: NSRect(x: 0, y: 0, width: defaultWidth, height: defaultHeight),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
 
         panel.isFloatingPanel = true
-        panel.level = .floating
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        // Level above status window overlays seamlessly on top of notch & menu bar
+        panel.level = NSWindow.Level(Int(CGWindowLevelForKey(.statusWindow)) + 1)
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = false
-        panel.isMovableByWindowBackground = true
+        panel.isMovableByWindowBackground = false
 
         let contentView = FloatingOverlayView(appState: AppState.shared)
         panel.contentView = NSHostingView(rootView: contentView)
 
-        // Center on screen
+        // Position exactly at top center of main screen (Notch area)
         if let screen = NSScreen.main {
-            let screenRect = screen.visibleFrame
-            let x = screenRect.midX - 220
-            let y = screenRect.midY - 120
-            panel.setFrameOrigin(NSPoint(x: x, y: y))
+            let screenFrame = screen.frame
+            let x = screenFrame.midX - (defaultWidth / 2.0)
+            let y = screenFrame.maxY - defaultHeight
+            panel.setFrame(NSRect(x: x, y: y, width: defaultWidth, height: defaultHeight), display: true)
         }
 
         self.overlayPanel = panel

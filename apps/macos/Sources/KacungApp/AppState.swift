@@ -12,7 +12,8 @@ public final class AppState: ObservableObject {
     @Published public var liveTranscript: String = ""
     @Published public var inputText: String = ""
     @Published public var pendingConfirmation: ConfirmationRequest? = nil
-    @Published public var isOverlayVisible = true
+    @Published public var isOverlayVisible = false
+    @Published public var isVisibleOnScreen = false
     @Published public var audioLevel: Float = 0.0
     @Published public var isAccessibilityGranted = false
     @Published public var isMicrophoneGranted = false
@@ -27,6 +28,7 @@ public final class AppState: ObservableObject {
     private let speechSynthesizer = NativeSpeechSynthesizer.shared
     private let hotkey = HotkeyManager.shared
     private let permissions = PermissionManager.shared
+    private var autoDismissWorkItem: DispatchWorkItem?
 
     private init() {
         checkPermissions()
@@ -53,9 +55,6 @@ public final class AppState: ObservableObject {
 
         client.onStateChanged = { [weak self] newState in
             self?.state = newState
-            if newState != .idle {
-                self?.showOverlay()
-            }
         }
 
         client.onConfirmationRequired = { [weak self] req in
@@ -65,17 +64,18 @@ public final class AppState: ObservableObject {
 
         client.onSpeechStart = { [weak self] text in
             self?.state = .speaking
-            // Native voice feedback fallback
             self?.speechSynthesizer.speak(text: text)
         }
 
         client.onSpeechEnd = { [weak self] _ in
             self?.state = .idle
+            self?.scheduleAutoDismiss(delay: 1.8)
         }
 
         client.onError = { [weak self] errorMsg in
             self?.state = .error
             self?.lastResponse = "Error: \(errorMsg)"
+            self?.scheduleAutoDismiss(delay: 3.0)
         }
     }
 
@@ -110,19 +110,14 @@ public final class AppState: ObservableObject {
 
         speechRecognizer.onTranscriptFinalized = { [weak self] finalTranscript in
             guard let self = self else { return }
-            print("[AppState] Speech recognized: \"\(finalTranscript)\"")
-            self.liveTranscript = finalTranscript
-            self.inputText = finalTranscript
+            let query = finalTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !query.isEmpty else { return }
+            print("[AppState] Speech recognized: \"\(query)\". Submitting query...")
+            self.liveTranscript = query
+            self.inputText = query
 
-            // Brief visual delay so user sees the recognized text in the input box before auto-submitting
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
-                guard let self = self else { return }
-                let query = self.inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !query.isEmpty {
-                    print("[AppState] Auto-submitting voice query: \"\(query)\"")
-                    self.sendQuery(text: query)
-                }
-            }
+            self.sendQuery(text: query)
+            self.scheduleAutoDismiss(delay: 2.2)
         }
 
         speechRecognizer.onAudioRecorded = { [weak self] audioURL in
@@ -134,10 +129,12 @@ public final class AppState: ObservableObject {
                 case .success(let res):
                     self?.lastResponse = res.text
                     self?.state = .idle
+                    self?.scheduleAutoDismiss(delay: 2.0)
                 case .failure(let err):
                     self?.state = .error
                     self?.errorMessage = err.localizedDescription
                     self?.lastResponse = ""
+                    self?.scheduleAutoDismiss(delay: 3.0)
                 }
             }
         }
@@ -151,17 +148,22 @@ public final class AppState: ObservableObject {
     }
 
     public func handleHotkeyWake() {
-        showOverlay()
-        if state == .idle {
-            startListening()
-        } else if state == .listening {
-            stopListening()
+        autoDismissWorkItem?.cancel()
+        if isVisibleOnScreen {
+            // Dismiss immediately if user taps hotkey while active
+            hideOverlay()
+            if state == .listening {
+                speechRecognizer.stopListening()
+            }
         } else {
-            toggleOverlay()
+            // Summon from notch and listen immediately
+            showOverlay()
+            startListening()
         }
     }
 
     public func startListening() {
+        autoDismissWorkItem?.cancel()
         checkPermissions()
         state = .listening
         liveTranscript = ""
@@ -183,14 +185,19 @@ public final class AppState: ObservableObject {
         inputText = text
         errorMessage = nil
 
+        // Schedule auto-retract into notch after dispatching prompt
+        scheduleAutoDismiss(delay: 2.5)
+
         client.sendQuery(text: text) { [weak self] result in
             switch result {
             case .success(let res):
                 self?.lastResponse = res.text
                 self?.state = .idle
+                self?.scheduleAutoDismiss(delay: 2.0)
             case .failure(let err):
                 self?.state = .error
                 self?.lastResponse = "Error: \(err.localizedDescription)"
+                self?.scheduleAutoDismiss(delay: 3.5)
             }
         }
     }
@@ -198,6 +205,7 @@ public final class AppState: ObservableObject {
     public func resolveConfirmation(id: String, approved: Bool) {
         client.sendConfirmation(id: id, approved: approved)
         pendingConfirmation = nil
+        scheduleAutoDismiss(delay: 1.5)
     }
 
     public func resetConversation() {
@@ -211,7 +219,7 @@ public final class AppState: ObservableObject {
     }
 
     public func toggleOverlay() {
-        if isOverlayVisible {
+        if isVisibleOnScreen {
             hideOverlay()
         } else {
             showOverlay()
@@ -219,13 +227,49 @@ public final class AppState: ObservableObject {
     }
 
     public func showOverlay() {
+        autoDismissWorkItem?.cancel()
         isOverlayVisible = true
         overlayWindow?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.74)) {
+            isVisibleOnScreen = true
+        }
     }
 
     public func hideOverlay() {
-        isOverlayVisible = false
-        overlayWindow?.orderOut(nil)
+        autoDismissWorkItem?.cancel()
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.74)) {
+            isVisibleOnScreen = false
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.32) { [weak self] in
+            guard let self = self, !self.isVisibleOnScreen else { return }
+            self.isOverlayVisible = false
+            self.overlayWindow?.orderOut(nil)
+        }
+    }
+
+    public func scheduleAutoDismiss(delay: Double = 2.0) {
+        autoDismissWorkItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            if self.state != .listening && self.pendingConfirmation == nil {
+                print("[AppState] Auto-dismissing Notch island back into bezel...")
+                self.hideOverlay()
+            }
+        }
+        autoDismissWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+    }
+
+    public func updateOverlayHeight(_ height: CGFloat) {
+        guard let panel = overlayWindow, let screen = NSScreen.main else { return }
+        let safeHeight = max(height, 52.0)
+        let screenFrame = screen.frame
+        let width = panel.frame.width
+        let x = screenFrame.midX - (width / 2.0)
+        let y = screenFrame.maxY - safeHeight
+        let newFrame = NSRect(x: x, y: y, width: width, height: safeHeight)
+        if abs(panel.frame.height - safeHeight) > 1.0 {
+            panel.setFrame(newFrame, display: true, animate: false)
+        }
     }
 }

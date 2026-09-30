@@ -109,7 +109,7 @@ export function loadConfig(envPath?: string): KacungConfig {
       name: env.ASSISTANT_NAME || 'Kacung',
       wakePhrase: env.WAKE_PHRASE || 'Woi Kacung',
       languages: (env.DEFAULT_LANGUAGES || 'id,en').split(',').map((s) => s.trim()),
-      hotkeyFallback: env.HOTKEY_FALLBACK || 'Option+Space',
+      hotkeyFallback: env.HOTKEY_FALLBACK || 'Control+Option',
     },
     security: {
       confirmSensitiveActions: env.CONFIRM_SENSITIVE_ACTIONS !== 'false',

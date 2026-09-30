@@ -1,4 +1,4 @@
-import { execFile } from 'child_process';
+import { execFile, execFileSync } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@kacung/types';
@@ -219,8 +219,9 @@ export const playMusicTool: ToolDefinition<PlayMusicParams, PlayMusicResultData>
         // 3. Wait for Music app to load and render the new album view
         await new Promise((r) => setTimeout(r, 1400));
 
-        // 4. Click the "Play" button in the album details view to start playing the new song
-        const clickPlayScript = `
+        // 4. Locate the exact track row and double-click it directly so playback starts on that song
+        const safeTargetTitle = (catalogMatch.trackName || cleanQuery).replace(/"/g, '\\"');
+        const findTrackScript = `
           tell application "Music" to activate
           delay 0.4
           tell application "System Events"
@@ -231,30 +232,91 @@ export const playMusicTool: ToolDefinition<PlayMusicParams, PlayMusicResultData>
                 repeat with el in every UI element of sg
                   try
                     if description of el is "album details" then
-                      repeat with b in every button of el
+                      set trackTable to first UI element of el whose description is "track list"
+                      set rc to count of rows of trackTable
+                      repeat with idx from 1 to rc
+                        set r to row idx of trackTable
+                        set isMatch to false
                         try
-                          if description of b is "play" or name of b is "Play" then
-                            click b
-                            return "clicked_play"
+                          if (value of attribute "AXSelected" of r) is true then
+                            set isMatch to true
                           end if
                         end try
+                        if not isMatch then
+                          try
+                            repeat with subEl in every UI element of r
+                              if name of subEl contains "${safeTargetTitle}" then
+                                set isMatch to true
+                                exit repeat
+                              end if
+                            end repeat
+                          end try
+                        end if
+                        if isMatch then
+                          set pos to position of r
+                          set sz to size of r
+                          return "found:" & ((item 1 of pos as integer) as string) & ":" & ((item 2 of pos as integer) as string) & ":" & ((item 1 of sz as integer) as string) & ":" & ((item 2 of sz as integer) as string)
+                        end if
                       end repeat
                     end if
                   end try
                 end repeat
               end try
-              return "fallback"
+              return "not_found"
             end tell
           end tell
         `;
 
+        let playedTrack = false;
         try {
-          const { stdout: clickOut } = await execFileAsync('osascript', ['-e', clickPlayScript]);
-          context.logger.info(`Apple Music play click result: ${clickOut.trim()}`);
-          if (clickOut.trim() !== 'clicked_play') {
-            await execFileAsync('osascript', ['-e', 'tell application "Music" to play']);
+          const { stdout: findOut } = await execFileAsync('osascript', ['-e', findTrackScript]);
+          const resultText = findOut.trim();
+          if (resultText.startsWith('found:')) {
+            const parts = resultText.split(':');
+            const posX = parseInt(parts[1], 10);
+            const posY = parseInt(parts[2], 10);
+            const height = parseInt(parts[4], 10) || 46;
+            const clickX = posX + 120;
+            const clickY = posY + Math.floor(height / 2);
+
+            const swiftDoubleClick = `
+import CoreGraphics
+import Foundation
+
+let point = CGPoint(x: ${clickX}, y: ${clickY})
+let move = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)
+move?.post(tap: .cghidEventTap)
+usleep(15000)
+
+let down1 = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)
+down1?.setIntegerValueField(.mouseEventClickState, value: 1)
+down1?.post(tap: .cghidEventTap)
+usleep(30000)
+
+let up1 = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)
+up1?.setIntegerValueField(.mouseEventClickState, value: 1)
+up1?.post(tap: .cghidEventTap)
+usleep(50000)
+
+let down2 = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)
+down2?.setIntegerValueField(.mouseEventClickState, value: 2)
+down2?.post(tap: .cghidEventTap)
+usleep(30000)
+
+let up2 = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)
+up2?.setIntegerValueField(.mouseEventClickState, value: 2)
+up2?.post(tap: .cghidEventTap)
+`;
+            execFileSync('swift', ['-'], { input: swiftDoubleClick, encoding: 'utf-8' });
+            playedTrack = true;
+            context.logger.info(`Double-clicked track row for "${catalogMatch.trackName}" at (${clickX}, ${clickY})`);
           }
-        } catch {
+        } catch (err) {
+          context.logger.warn(`Finding/double-clicking track row encountered error: ${err}`);
+        }
+
+        if (!playedTrack) {
+          // Fallback to album play button or telling Music to play
           try {
             await execFileAsync('osascript', ['-e', 'tell application "Music" to play']);
           } catch {}
