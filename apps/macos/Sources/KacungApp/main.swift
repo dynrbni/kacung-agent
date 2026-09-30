@@ -51,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Start quietly in background; overlay only appears on Control + Option hotkey trigger
         AppState.shared.hideOverlay()
 
+        NSLog("[Kacung] applicationDidFinishLaunching - AXIsProcessTrusted: %d", AXIsProcessTrusted() ? 1 : 0)
         print("Kacung macOS application initialized successfully in background. Press Control+Option to summon.")
     }
 
@@ -116,6 +117,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 // Top-level entry point (runs on Main thread)
 MainActor.assumeIsolated {
+    if CommandLine.arguments.contains("--check-ax") {
+        let trusted = AXIsProcessTrusted()
+        print("AX_RESULT:\(trusted)")
+        exit(trusted ? 0 : 1)
+    }
+
     let app = NSApplication.shared
     let delegate = AppDelegate()
     app.delegate = delegate
