@@ -14,6 +14,8 @@ import { ToolExecutor } from '@kacung/tools';
 import { buildSystemPrompt } from './prompt.js';
 import { StructuredLogger } from '../logger/index.js';
 import { processTranscript } from '../transcript/index.js';
+import { parseCommand, validateWhatsAppIntent, formatCommandTrace } from '../parser/index.js';
+import type { CommandTrace } from '@kacung/types';
 
 export interface AgentRuntimeOptions {
   llmProvider: LLMProvider;
@@ -274,6 +276,38 @@ export class AgentRuntime {
     });
     this.setState('thinking', { requestId, query });
 
+    const parsedCommand = parseCommand(query);
+
+    // 1. Validation check for structured messaging intents (e.g. "WhatsApp Reja Agung terus bilang")
+    if (parsedCommand.isStructured && parsedCommand.primaryIntent) {
+      if (parsedCommand.primaryIntent.intent === 'send_whatsapp_message') {
+        const validation = validateWhatsAppIntent(parsedCommand.primaryIntent);
+        if (!validation.valid && validation.reason === 'message_missing') {
+          const trace: CommandTrace = {
+            rawTranscript: query,
+            parsedIntent: parsedCommand.actions,
+            validation: {
+              recipient: validation.recipient ? 'valid' : 'missing',
+              message: 'missing',
+              reason: validation.reason,
+            },
+          };
+          this.logger.warn('WhatsApp structured validation failed: message missing (DO NOT SEND)', { trace });
+          if (this.debug) {
+            console.log('\n' + formatCommandTrace(trace) + '\n');
+          }
+          this.setState('idle');
+          return {
+            text: validation.recipient
+              ? `Mau kirim pesan apa ke ${validation.recipient}?`
+              : 'Penerima pesan belum disebutkan. Mau kirim pesan apa?',
+            steps: [],
+            completed: true,
+          };
+        }
+      }
+    }
+
     this.messages.push({
       role: 'user',
       content: query,
@@ -391,6 +425,48 @@ export class AgentRuntime {
 
           // 3. Execute tools sequentially
           for (const tc of completion.toolCalls) {
+            // Guard: Enforce authoritative verbatim message and recipient preservation
+            if (
+              tc.name === 'send_whatsapp_message' &&
+              parsedCommand.isStructured &&
+              parsedCommand.primaryIntent &&
+              parsedCommand.primaryIntent.intent === 'send_whatsapp_message'
+            ) {
+              const authoritative = parsedCommand.primaryIntent;
+              if (authoritative.recipient) {
+                if (tc.parameters.contact !== undefined) {
+                  tc.parameters.contact = authoritative.recipient;
+                } else {
+                  tc.parameters.recipient = authoritative.recipient;
+                }
+              }
+              if (authoritative.message) {
+                tc.parameters.message = authoritative.message;
+              }
+
+              const trace: CommandTrace = {
+                rawTranscript: query,
+                parsedIntent: parsedCommand.primaryIntent,
+                validation: {
+                  recipient: 'valid',
+                  message: 'valid',
+                },
+                contactResolution: {
+                  query: authoritative.recipient,
+                  resolved: true,
+                  contactName: authoritative.recipient,
+                },
+                execution: {
+                  tool: 'send_whatsapp_message',
+                  parameters: tc.parameters,
+                },
+              };
+              this.logger.info('Executing authoritative structured WhatsApp message', { trace });
+              if (this.debug) {
+                console.log('\n' + formatCommandTrace(trace) + '\n');
+              }
+            }
+
             const toolStartTime = Date.now();
 
             if (this.debug) {

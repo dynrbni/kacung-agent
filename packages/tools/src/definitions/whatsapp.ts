@@ -118,52 +118,96 @@ export const openWhatsAppChatTool: ToolDefinition<OpenWhatsAppChatParams, { cont
 // ----------------------------------------------------------------------------
 // Send WhatsApp Message Tool (SENSITIVE — With Explicit Confirmation)
 // ----------------------------------------------------------------------------
+// Send WhatsApp Message Tool (SENSITIVE — With Explicit Confirmation)
+// ----------------------------------------------------------------------------
 export interface SendWhatsAppMessageParams {
-  contact: string;
+  recipient?: string;
+  contact?: string; // alias for backward compatibility
   message: string;
 }
 
 export const sendWhatsAppMessageTool: ToolDefinition<SendWhatsAppMessageParams, WhatsAppMessageResult> = {
   name: 'send_whatsapp_message',
-  description: 'Sends a WhatsApp text message to a contact. Prompts for user confirmation before dispatching.',
+  description: 'Send a WhatsApp message to a specific recipient. Preserve the user\'s intended message content exactly.',
   permissionLevel: 'SENSITIVE',
   parameters: {
     type: 'object',
     properties: {
-      contact: {
+      recipient: {
         type: 'string',
-        description: 'Recipient contact name (e.g. "Andi", "Budi").',
+        minLength: 1,
+        description: 'Recipient contact name (e.g. "Reja Agung", "Dimas", "Andi").',
       },
       message: {
         type: 'string',
-        description: 'The message body to send (e.g. "Gue telat 15 menit.").',
+        minLength: 1,
+        description: 'The exact message body to send. Must be preserved verbatim without truncation or summarization.',
+      },
+      contact: {
+        type: 'string',
+        description: 'Alias for recipient.',
       },
     },
-    required: ['contact', 'message'],
+    required: ['recipient', 'message'],
   },
   validate(params: unknown) {
     if (!params || typeof params !== 'object') {
       return { valid: false, error: 'Parameters must be an object' };
     }
     const p = params as Record<string, unknown>;
-    if (!p.contact || typeof p.contact !== 'string') {
-      return { valid: false, error: 'contact is required' };
+    const target = typeof p.recipient === 'string' && p.recipient.trim()
+      ? p.recipient.trim()
+      : typeof p.contact === 'string' && p.contact.trim()
+      ? p.contact.trim()
+      : '';
+    if (!target) {
+      return { valid: false, error: 'recipient is required and must not be empty' };
     }
-    if (!p.message || typeof p.message !== 'string') {
-      return { valid: false, error: 'message is required' };
+    if (!p.message || typeof p.message !== 'string' || !p.message.trim()) {
+      return { valid: false, error: 'message is required and must not be empty' };
     }
     return { valid: true };
   },
   async execute(params: SendWhatsAppMessageParams, context: ToolExecutionContext): Promise<ToolResult<WhatsAppMessageResult>> {
-    const { contact, message } = params;
-    context.logger.info(`send_whatsapp_message requested for "${contact}": "${message}"`);
+    const recipient = (params.recipient || params.contact || '').trim();
+    const message = (params.message || '').trim();
+
+    if (!recipient) {
+      return {
+        success: false,
+        error: 'Recipient is required',
+        data: {
+          recipient: '',
+          text: message,
+          sent: false,
+          verified: false,
+          details: 'Recipient is missing.',
+        },
+      };
+    }
+
+    if (!message) {
+      return {
+        success: false,
+        error: 'Message is required and cannot be empty',
+        data: {
+          recipient,
+          text: '',
+          sent: false,
+          verified: false,
+          details: 'Message content is missing.',
+        },
+      };
+    }
+
+    context.logger.info(`send_whatsapp_message requested for "${recipient}": "${message}"`);
 
     // Safety confirmation flow
     if (context.requestConfirmation) {
-      const prompt = `Gue akan kirim ke ${contact}: "${message}". Kirim sekarang?`;
+      const prompt = `Gue akan kirim ke ${recipient}: "${message}". Kirim sekarang?`;
       const approved = await context.requestConfirmation({
         toolName: 'send_whatsapp_message',
-        parameters: { contact, message },
+        parameters: { recipient, message },
         permissionLevel: 'SENSITIVE',
         description: prompt,
       });
@@ -171,9 +215,9 @@ export const sendWhatsAppMessageTool: ToolDefinition<SendWhatsAppMessageParams, 
       if (!approved) {
         return {
           success: false,
-          error: `Pengiriman pesan ke "${contact}" dibatalkan oleh pengguna.`,
+          error: `Pengiriman pesan ke "${recipient}" dibatalkan oleh pengguna.`,
           data: {
-            recipient: contact,
+            recipient,
             text: message,
             sent: false,
             verified: false,
@@ -184,7 +228,7 @@ export const sendWhatsAppMessageTool: ToolDefinition<SendWhatsAppMessageParams, 
     }
 
     const controller = new WhatsAppController(context.logger);
-    const result = await controller.sendMessage(contact, message);
+    const result = await controller.sendMessage(recipient, message);
 
     return {
       success: result.sent,

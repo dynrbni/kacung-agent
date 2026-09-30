@@ -74,6 +74,10 @@ export interface ToolParameterProperty {
   enum?: string[];
   default?: unknown;
   items?: ToolParameterProperty;
+  minLength?: number;
+  maxLength?: number;
+  minimum?: number;
+  maximum?: number;
 }
 
 export interface ToolParametersSchema {
@@ -345,4 +349,73 @@ export interface ProcessedTranscript {
   validationReason?: string;
   hasCorrections: boolean;
   corrections: TranscriptCorrection[];
+}
+
+// ============================================================================
+// Structured Intent & Messaging Command Pipeline
+// ============================================================================
+
+export type StructuredActionIntent =
+  | {
+      intent: 'send_whatsapp_message';
+      recipient: string;
+      message: string;
+      rawMarker?: string;
+    }
+  | {
+      intent: 'open_whatsapp_chat';
+      recipient: string;
+      messageMissing?: boolean;
+    }
+  | {
+      intent: 'open_app';
+      app: string;
+    }
+  | {
+      intent: 'play_music';
+      query: string;
+      app?: string;
+    }
+  | {
+      intent: 'unknown';
+      query: string;
+    };
+
+export interface WhatsAppIntentValidation {
+  valid: boolean;
+  reason?: 'recipient_missing' | 'message_missing' | 'invalid_intent' | 'ok';
+  recipient?: string;
+  message?: string;
+}
+
+export interface CommandParseResult {
+  rawTranscript: string;
+  normalizedTranscript: string;
+  actions: StructuredActionIntent[];
+  isStructured: boolean;
+  primaryIntent?: StructuredActionIntent;
+  validation?: WhatsAppIntentValidation;
+}
+
+export interface CommandTrace {
+  rawTranscript: string;
+  parsedIntent: StructuredActionIntent | StructuredActionIntent[];
+  validation: {
+    recipient: 'valid' | 'missing' | 'empty';
+    message: 'valid' | 'missing' | 'empty' | 'na';
+    reason?: string;
+  };
+  contactResolution?: {
+    query: string;
+    resolved: boolean;
+    contactName?: string;
+  };
+  execution?: {
+    tool: string;
+    parameters: Record<string, unknown>;
+  };
+  result?: {
+    success: boolean;
+    details?: string;
+  };
 }

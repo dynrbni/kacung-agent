@@ -133,19 +133,31 @@ export class WhatsAppController {
   }
 
   /**
-   * Composes and sends a message to the currently open chat.
+   * Composes and sends a message to the specified contact in WhatsApp.
+   * Ensures WhatsApp is open, navigates to the contact chat, types the exact message, and dispatches.
    */
   public async sendMessage(contactName: string, text: string): Promise<WhatsAppMessageResult> {
     this.logger?.info(`Sending WhatsApp message to "${contactName}": "${text}"`);
-    await this.openWhatsApp();
-    await new Promise((r) => setTimeout(r, 500));
 
-    // Type text into focused message field and hit Return
+    // 1. Ensure WhatsApp Desktop or Web is open
+    await this.openWhatsApp();
+    await new Promise((r) => setTimeout(r, 400));
+
+    // 2. Search for and navigate to the recipient's chat conversation
+    const cleanContact = contactName.trim();
+    if (cleanContact) {
+      await this.searchContact(cleanContact);
+      // Wait for conversation to load and input field to gain focus
+      await new Promise((r) => setTimeout(r, 500));
+    }
+
+    // 3. Type text into focused message field and hit Return
     const escaped = text.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     const script = `
       tell application "System Events"
         tell process "WhatsApp"
           set frontmost to true
+          delay 0.2
           keystroke "${escaped}"
           delay 0.2
           key code 36 -- Return to send

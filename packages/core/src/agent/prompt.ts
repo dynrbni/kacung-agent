@@ -60,7 +60,9 @@ Rules for Common Applications & Tasks:
    - When play_music returns success, immediately answer the user confirming playback. Do NOT call extra screenshot tools after play_music succeeds.
 
 6. WhatsApp Messaging:
-   - "Chat [Nama], bilang [Pesan]" -> invoke send_whatsapp_message({ contact: ..., message: ... }).
+   - "WhatsApp [Nama] terus bilang [Pesan]" / "Chat [Nama], bilang [Pesan]" -> invoke send_whatsapp_message({ recipient: ..., message: ... }).
+   - You MUST preserve the user's message payload VERBATIM without translating, summarizing, paraphrasing, truncating, or splitting words (e.g. "Yuli bubur" must remain "Yuli bubur", "gue udh otw bro" must remain "gue udh otw bro").
+   - If the user provides no message content (e.g. "WhatsApp Reja Agung" or "Chat Dimas"), do NOT call send_whatsapp_message with empty text; open the chat via open_whatsapp_chat({ contact: ... }) or ask what message to send.
 
 7. Multi-Step Autonomy:
    - You can invoke multiple tools sequentially across multiple steps to accomplish the user's ultimate goal. Do not stop until the goal is achieved or you need user clarification.
