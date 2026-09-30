@@ -4,7 +4,7 @@ import { ToolRegistry } from './registry.js';
 describe('ToolRegistry', () => {
   it('should initialize with all default computer-use tools', () => {
     const registry = new ToolRegistry();
-    expect(registry.count()).toBe(37);
+    expect(registry.count()).toBe(39);
 
     const expectedTools = [
       'open_app',
@@ -44,6 +44,8 @@ describe('ToolRegistry', () => {
       'search_whatsapp_contact',
       'open_whatsapp_chat',
       'send_whatsapp_message',
+      'set_volume',
+      'write_word_document',
     ];
 
     for (const toolName of expectedTools) {
@@ -60,7 +62,7 @@ describe('ToolRegistry', () => {
     const registry = new ToolRegistry();
     const llmTools = registry.toLLMTools();
 
-    expect(llmTools.length).toBe(37);
+    expect(llmTools.length).toBe(39);
     for (const item of llmTools) {
       expect(item.type).toBe('function');
       expect(item.function.name).toBeTypeOf('string');

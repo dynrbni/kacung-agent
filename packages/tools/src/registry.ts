@@ -25,6 +25,8 @@ import {
   openWhatsAppChatTool,
   sendWhatsAppMessageTool,
 } from './definitions/whatsapp.js';
+import { setVolumeTool } from './definitions/volume.js';
+import { writeWordDocumentTool } from './definitions/word.js';
 
 export class ToolRegistry {
   private tools = new Map<string, ToolDefinition>();
@@ -135,6 +137,12 @@ export class ToolRegistry {
       searchWhatsAppContactTool as unknown as ToolDefinition,
       openWhatsAppChatTool as unknown as ToolDefinition,
       sendWhatsAppMessageTool as unknown as ToolDefinition,
+
+      // System Volume
+      setVolumeTool as unknown as ToolDefinition,
+
+      // Document & Word Processing
+      writeWordDocumentTool as unknown as ToolDefinition,
     ];
 
     for (const tool of defaults) {

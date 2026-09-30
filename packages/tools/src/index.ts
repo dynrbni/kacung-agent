@@ -13,5 +13,7 @@ export * from './definitions/ui.js';
 export * from './definitions/timing.js';
 export * from './definitions/verification.js';
 export * from './definitions/whatsapp.js';
+export * from './definitions/volume.js';
+export * from './definitions/word.js';
 export * from './whatsapp/controller.js';
 export * from './computer/engine.js';
