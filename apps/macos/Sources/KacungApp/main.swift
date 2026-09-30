@@ -1,6 +1,23 @@
 import AppKit
 import SwiftUI
 
+final class NotchHostingView<Content: View>: NSHostingView<Content> {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard AppState.shared.isVisibleOnScreen else { return nil }
+        
+        // Cocoa view coordinates: y=0 is bottom, y=bounds.height is top.
+        // Active island content is anchored at the top of the hosting view.
+        let activeHeight: CGFloat = AppState.shared.isOutputExpanded ? 220.0 : 85.0
+        let islandBottomY = bounds.height - activeHeight
+        
+        // If mouse is below the active island area, pass through to windows underneath
+        if point.y < islandBottomY {
+            return nil
+        }
+        return super.hitTest(point)
+    }
+}
+
 final class NotchPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
@@ -49,13 +66,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if popover.isShown {
             popover.performClose(nil)
         } else {
+            AppState.shared.checkPermissions()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         }
     }
 
     private func setupFloatingOverlay() {
-        let defaultWidth: CGFloat = 400
-        let defaultHeight: CGFloat = 60
+        let defaultWidth: CGFloat = 420
+        let defaultHeight: CGFloat = 240
 
         let panel = NotchPanel(
             contentRect: NSRect(x: 0, y: 0, width: defaultWidth, height: defaultHeight),
@@ -74,15 +92,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isMovableByWindowBackground = false
 
         let contentView = FloatingOverlayView(appState: AppState.shared)
-        panel.contentView = NSHostingView(rootView: contentView)
+        panel.contentView = NotchHostingView(rootView: contentView)
 
-        // Position exactly at top center of main screen (Notch area)
-        if let screen = NSScreen.main {
-            let screenFrame = screen.frame
-            let x = screenFrame.midX - (defaultWidth / 2.0)
-            let y = screenFrame.maxY - defaultHeight
-            panel.setFrame(NSRect(x: x, y: y, width: defaultWidth, height: defaultHeight), display: true)
-        }
+        // Position exactly at top center of notch screen
+        let notchScreen = getNotchScreen()
+        let screenFrame = notchScreen.frame
+        let x = screenFrame.midX - (defaultWidth / 2.0)
+        let y = screenFrame.maxY - defaultHeight
+        panel.setFrame(NSRect(x: x, y: y, width: defaultWidth, height: defaultHeight), display: true)
 
         self.overlayPanel = panel
     }

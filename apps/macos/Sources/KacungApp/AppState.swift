@@ -2,6 +2,18 @@ import Foundation
 import SwiftUI
 import Combine
 
+public func getNotchScreen() -> NSScreen {
+    if let notchScreen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) {
+        return notchScreen
+    }
+    if #available(macOS 12.0, *) {
+        if let notchScreen = NSScreen.screens.first(where: { $0.auxiliaryTopLeftArea != nil }) {
+            return notchScreen
+        }
+    }
+    return NSScreen.main ?? NSScreen.screens.first ?? NSScreen()
+}
+
 @MainActor
 public final class AppState: ObservableObject {
     public static let shared = AppState()
@@ -14,6 +26,8 @@ public final class AppState: ObservableObject {
     @Published public var pendingConfirmation: ConfirmationRequest? = nil
     @Published public var isOverlayVisible = false
     @Published public var isVisibleOnScreen = false
+    @Published public var isOutputExpanded = false
+    @Published public var notchTopInset: CGFloat = 32.0
     @Published public var audioLevel: Float = 0.0
     @Published public var isAccessibilityGranted = false
     @Published public var isMicrophoneGranted = false
@@ -29,18 +43,68 @@ public final class AppState: ObservableObject {
     private let hotkey = HotkeyManager.shared
     private let permissions = PermissionManager.shared
     private var autoDismissWorkItem: DispatchWorkItem?
+    private var hideWorkItem: DispatchWorkItem?
 
     private init() {
         checkPermissions()
+        updateNotchMetrics()
         setupClientHandlers()
         setupSpeechHandlers()
         setupHotkey()
 
+        // Periodically monitor system permissions (e.g. user toggles Accessibility in System Settings)
+        Timer.publish(every: 2.0, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                self?.checkPermissions()
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.checkPermissions()
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.repositionOverlayWindow()
+            }
+            .store(in: &cancellables)
+
         client.connect()
     }
 
+    public func updateNotchMetrics() {
+        let screen = getNotchScreen()
+        let topInset = screen.safeAreaInsets.top
+        self.notchTopInset = topInset > 0 ? topInset : 0.0
+    }
+
+    public func repositionOverlayWindow() {
+        guard let panel = overlayWindow else { return }
+        updateNotchMetrics()
+        let notchScreen = getNotchScreen()
+        let screenFrame = notchScreen.frame
+        let windowWidth: CGFloat = 420.0
+        let windowHeight: CGFloat = 240.0
+        let x = screenFrame.midX - (windowWidth / 2.0)
+        let y = screenFrame.maxY - windowHeight
+        let targetFrame = NSRect(x: x, y: y, width: windowWidth, height: windowHeight)
+        if panel.frame != targetFrame {
+            panel.setFrame(targetFrame, display: true, animate: false)
+        }
+    }
+
     public func checkPermissions() {
-        isAccessibilityGranted = permissions.isAccessibilityGranted
+        let prevAX = isAccessibilityGranted
+        let currentAX = permissions.isAccessibilityGranted
+        if prevAX != currentAX {
+            print("[AppState] Accessibility permission updated: \(currentAX)")
+        }
+        isAccessibilityGranted = currentAX
         isMicrophoneGranted = permissions.isMicrophoneGranted
         isSpeechGranted = permissions.isSpeechRecognitionGranted
     }
@@ -117,24 +181,24 @@ public final class AppState: ObservableObject {
             self.inputText = query
 
             self.sendQuery(text: query)
-            self.scheduleAutoDismiss(delay: 2.2)
         }
 
         speechRecognizer.onAudioRecorded = { [weak self] audioURL in
             guard let self = self else { return }
             print("[AppState] Sending recorded voice audio to agent runtime...")
+            self.autoDismissWorkItem?.cancel()
             self.state = .thinking
             self.client.sendAudioFile(url: audioURL) { [weak self] result in
                 switch result {
                 case .success(let res):
                     self?.lastResponse = res.text
                     self?.state = .idle
-                    self?.scheduleAutoDismiss(delay: 2.0)
+                    self?.scheduleAutoDismiss(delay: 4.0)
                 case .failure(let err):
                     self?.state = .error
                     self?.errorMessage = err.localizedDescription
                     self?.lastResponse = ""
-                    self?.scheduleAutoDismiss(delay: 3.0)
+                    self?.scheduleAutoDismiss(delay: 4.5)
                 }
             }
         }
@@ -179,25 +243,23 @@ public final class AppState: ObservableObject {
     }
 
     public func sendQuery(text: String) {
+        autoDismissWorkItem?.cancel()
         state = .thinking
         lastResponse = ""
         liveTranscript = text
         inputText = text
         errorMessage = nil
 
-        // Schedule auto-retract into notch after dispatching prompt
-        scheduleAutoDismiss(delay: 2.5)
-
         client.sendQuery(text: text) { [weak self] result in
             switch result {
             case .success(let res):
                 self?.lastResponse = res.text
                 self?.state = .idle
-                self?.scheduleAutoDismiss(delay: 2.0)
+                self?.scheduleAutoDismiss(delay: 4.0)
             case .failure(let err):
                 self?.state = .error
                 self?.lastResponse = "Error: \(err.localizedDescription)"
-                self?.scheduleAutoDismiss(delay: 3.5)
+                self?.scheduleAutoDismiss(delay: 4.5)
             }
         }
     }
@@ -205,7 +267,7 @@ public final class AppState: ObservableObject {
     public func resolveConfirmation(id: String, approved: Bool) {
         client.sendConfirmation(id: id, approved: approved)
         pendingConfirmation = nil
-        scheduleAutoDismiss(delay: 1.5)
+        scheduleAutoDismiss(delay: 2.0)
     }
 
     public func resetConversation() {
@@ -228,48 +290,48 @@ public final class AppState: ObservableObject {
 
     public func showOverlay() {
         autoDismissWorkItem?.cancel()
+        hideWorkItem?.cancel()
+        hideWorkItem = nil
+
+        repositionOverlayWindow()
+
         isOverlayVisible = true
         overlayWindow?.makeKeyAndOrderFront(nil)
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.74)) {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.76)) {
             isVisibleOnScreen = true
         }
     }
 
     public func hideOverlay() {
         autoDismissWorkItem?.cancel()
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.74)) {
+        hideWorkItem?.cancel()
+
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.76)) {
             isVisibleOnScreen = false
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.32) { [weak self] in
-            guard let self = self, !self.isVisibleOnScreen else { return }
-            self.isOverlayVisible = false
-            self.overlayWindow?.orderOut(nil)
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            if !self.isVisibleOnScreen {
+                self.isOverlayVisible = false
+                self.overlayWindow?.orderOut(nil)
+            }
         }
+        hideWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: workItem)
     }
 
-    public func scheduleAutoDismiss(delay: Double = 2.0) {
+    public func scheduleAutoDismiss(delay: Double = 4.0) {
         autoDismissWorkItem?.cancel()
         let item = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
-            if self.state != .listening && self.pendingConfirmation == nil {
+            // Only auto-dismiss if task completed (idle) or failed (error), never during execution or listening
+            if (self.state == .idle || self.state == .error) && self.pendingConfirmation == nil {
                 print("[AppState] Auto-dismissing Notch island back into bezel...")
                 self.hideOverlay()
             }
         }
         autoDismissWorkItem = item
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
-    }
-
-    public func updateOverlayHeight(_ height: CGFloat) {
-        guard let panel = overlayWindow, let screen = NSScreen.main else { return }
-        let safeHeight = max(height, 52.0)
-        let screenFrame = screen.frame
-        let width = panel.frame.width
-        let x = screenFrame.midX - (width / 2.0)
-        let y = screenFrame.maxY - safeHeight
-        let newFrame = NSRect(x: x, y: y, width: width, height: safeHeight)
-        if abs(panel.frame.height - safeHeight) > 1.0 {
-            panel.setFrame(newFrame, display: true, animate: false)
-        }
     }
 }

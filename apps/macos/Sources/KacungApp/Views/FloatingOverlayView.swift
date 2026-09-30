@@ -1,9 +1,13 @@
 import SwiftUI
 
-struct NotchIslandShape: Shape {
+struct DynamicIslandShape: Shape {
     var cornerRadius: CGFloat = 18
+    var hasNotch: Bool = true
 
     func path(in rect: CGRect) -> Path {
+        if !hasNotch {
+            return RoundedRectangle(cornerRadius: cornerRadius).path(in: rect)
+        }
         var path = Path()
         // Top-left at bezel
         path.move(to: CGPoint(x: rect.minX, y: rect.minY))
@@ -36,10 +40,47 @@ struct NotchIslandShape: Shape {
     }
 }
 
+struct DynamicIslandBorderShape: Shape {
+    var cornerRadius: CGFloat = 18
+    var hasNotch: Bool = true
+
+    func path(in rect: CGRect) -> Path {
+        if !hasNotch {
+            return RoundedRectangle(cornerRadius: cornerRadius).path(in: rect)
+        }
+        var path = Path()
+        // Start at top-right
+        path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
+        // Down right side
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - cornerRadius))
+        // Bottom-right corner
+        path.addArc(
+            center: CGPoint(x: rect.maxX - cornerRadius, y: rect.maxY - cornerRadius),
+            radius: cornerRadius,
+            startAngle: Angle(degrees: 0),
+            endAngle: Angle(degrees: 90),
+            clockwise: false
+        )
+        // Bottom edge
+        path.addLine(to: CGPoint(x: rect.minX + cornerRadius, y: rect.maxY))
+        // Bottom-left corner
+        path.addArc(
+            center: CGPoint(x: rect.minX + cornerRadius, y: rect.maxY - cornerRadius),
+            radius: cornerRadius,
+            startAngle: Angle(degrees: 90),
+            endAngle: Angle(degrees: 180),
+            clockwise: false
+        )
+        // Up left side to top-left
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        // Top edge remains open so it merges seamlessly into the black bezel
+        return path
+    }
+}
+
 public struct FloatingOverlayView: View {
     @ObservedObject public var appState: AppState
     @FocusState private var isInputFocused: Bool
-    @State private var isOutputExpanded: Bool = false
     @State private var hasCopied: Bool = false
 
     private var promptText: String {
@@ -47,6 +88,13 @@ public struct FloatingOverlayView: View {
             return appState.liveTranscript
         }
         return appState.inputText
+    }
+
+    private var topPadding: CGFloat {
+        if appState.notchTopInset > 0 {
+            return appState.notchTopInset + 4.0
+        }
+        return 10.0
     }
 
     public init(appState: AppState) {
@@ -112,7 +160,7 @@ public struct FloatingOverlayView: View {
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundColor(.purple)
                         }
-                    } else if !appState.lastResponse.isEmpty && !isOutputExpanded {
+                    } else if !appState.lastResponse.isEmpty && !appState.isOutputExpanded {
                         Text(appState.lastResponse)
                             .font(.system(size: 11))
                             .foregroundColor(.white.opacity(0.9))
@@ -175,7 +223,7 @@ public struct FloatingOverlayView: View {
                 }
 
                 // Response Card (when AI has responded and expanded view requested)
-                if !appState.lastResponse.isEmpty && isOutputExpanded {
+                if !appState.lastResponse.isEmpty && appState.isOutputExpanded {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             Label("Detail Perintah", systemImage: "text.bubble.fill")
@@ -209,7 +257,7 @@ public struct FloatingOverlayView: View {
 
                             Button(action: {
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    isOutputExpanded = false
+                                    appState.isOutputExpanded = false
                                 }
                             }) {
                                 Image(systemName: "chevron.up")
@@ -238,10 +286,10 @@ public struct FloatingOverlayView: View {
                 }
 
                 // If user clicks compact response to toggle full details
-                if !appState.lastResponse.isEmpty && !isOutputExpanded && appState.state != .listening {
+                if !appState.lastResponse.isEmpty && !appState.isOutputExpanded && appState.state != .listening {
                     Button(action: {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                            isOutputExpanded = true
+                            appState.isOutputExpanded = true
                         }
                     }) {
                         HStack {
@@ -259,23 +307,27 @@ public struct FloatingOverlayView: View {
                 }
             }
             .padding(.horizontal, 14)
-            .padding(.top, 6)
+            .padding(.top, topPadding)
             .padding(.bottom, 10)
+            .frame(width: 400)
             .background(
                 // Pure Solid Jet Black seamless with MacBook Notch
-                NotchIslandShape(cornerRadius: 18)
+                DynamicIslandShape(cornerRadius: 18, hasNotch: appState.notchTopInset > 0)
                     .fill(Color.black)
-                    .overlay(
-                        NotchIslandShape(cornerRadius: 18)
-                            .stroke(Color.white.opacity(0.08), lineWidth: 0.8)
-                    )
+            )
+            .overlay(
+                DynamicIslandBorderShape(cornerRadius: 18, hasNotch: appState.notchTopInset > 0)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 0.8)
             )
             .shadow(color: Color.black.opacity(0.6), radius: 14, x: 0, y: 7)
-            .offset(y: appState.isVisibleOnScreen ? 0 : -70)
+            .offset(y: appState.isVisibleOnScreen ? 0 : -(appState.notchTopInset + 90))
             .opacity(appState.isVisibleOnScreen ? 1.0 : 0.0)
-            .animation(.spring(response: 0.36, dampingFraction: 0.74), value: appState.isVisibleOnScreen)
+            .animation(.spring(response: 0.35, dampingFraction: 0.76), value: appState.isVisibleOnScreen)
+
+            Spacer(minLength: 0)
         }
-        .frame(width: 400)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .edgesIgnoringSafeArea(.all)
         .onAppear {
             isInputFocused = true
         }

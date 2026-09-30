@@ -36,8 +36,8 @@ public struct MenuBarView: View {
                     Image(systemName: "macwindow.on.rectangle")
                     Text("Toggle Assistant Overlay")
                     Spacer()
-                    Text("⌥ Space")
-                        .font(.caption)
+                    Text("⌃⌥")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
                         .foregroundColor(.secondary)
                 }
             }
@@ -82,6 +82,9 @@ public struct MenuBarView: View {
                         Spacer()
                         Button("Grant") {
                             PermissionManager.shared.openSystemSettings(for: "microphone")
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                                appState.checkPermissions()
+                            }
                         }
                         .font(.caption2)
                     }
@@ -97,6 +100,9 @@ public struct MenuBarView: View {
                         Spacer()
                         Button("Grant") {
                             PermissionManager.shared.openSystemSettings(for: "speech")
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                                appState.checkPermissions()
+                            }
                         }
                         .font(.caption2)
                     }
@@ -111,7 +117,11 @@ public struct MenuBarView: View {
                     if !appState.isAccessibilityGranted {
                         Spacer()
                         Button("Grant") {
+                            PermissionManager.shared.requestAccessibilityPermission()
                             PermissionManager.shared.openSystemSettings(for: "accessibility")
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                                appState.checkPermissions()
+                            }
                         }
                         .font(.caption2)
                     }
@@ -128,5 +138,8 @@ public struct MenuBarView: View {
         }
         .padding(12)
         .frame(width: 250)
+        .onAppear {
+            appState.checkPermissions()
+        }
     }
 }

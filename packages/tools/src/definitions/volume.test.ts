@@ -21,11 +21,12 @@ describe('Volume Tool', () => {
 
     const res = await setVolumeTool.execute({ action: 'get' }, mockContext as any);
     expect(res.success).toBe(true);
-    if (res.success) {
-      expect(typeof res.data.currentVolume).toBe('number');
-      expect(res.data.currentVolume).toBeGreaterThanOrEqual(0);
-      expect(res.data.currentVolume).toBeLessThanOrEqual(100);
-      expect(typeof res.data.isMuted).toBe('boolean');
+    if (res.success && res.data) {
+      const data = res.data as { currentVolume: number; isMuted: boolean };
+      expect(typeof data.currentVolume).toBe('number');
+      expect(data.currentVolume).toBeGreaterThanOrEqual(0);
+      expect(data.currentVolume).toBeLessThanOrEqual(100);
+      expect(typeof data.isMuted).toBe('boolean');
     }
   });
 });
