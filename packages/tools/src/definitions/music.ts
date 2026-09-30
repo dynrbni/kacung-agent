@@ -125,7 +125,7 @@ export const playMusicTool: ToolDefinition<PlayMusicParams, PlayMusicResultData>
         try {
           await execFileAsync('open', [`spotify:search:${encodeURIComponent(cleanQuery)}`]);
           // Short delay then send play command
-          await new Promise((r) => setTimeout(r, 800));
+          await new Promise((r) => setTimeout(r, 400));
           try {
             await execFileAsync('osascript', ['-e', 'tell application "Spotify" to play']);
           } catch {}

@@ -439,7 +439,14 @@ export class KacungAgentApp {
       return;
     }
 
-    // 8. POST /reset
+    // 8. POST /cancel
+    if (req.method === 'POST' && pathname === '/cancel') {
+      const cancelled = this.runtime.cancelCurrentTask();
+      sendJson(200, { success: true, cancelled, state: this.runtime.getState() });
+      return;
+    }
+
+    // 9. POST /reset
     if (req.method === 'POST' && pathname === '/reset') {
       this.runtime.resetConversation();
       this.runtime.setState('idle');

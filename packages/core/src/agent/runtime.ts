@@ -15,6 +15,7 @@ import { buildSystemPrompt } from './prompt.js';
 import { StructuredLogger } from '../logger/index.js';
 import { processTranscript } from '../transcript/index.js';
 import { parseCommand, validateWhatsAppIntent, formatCommandTrace } from '../parser/index.js';
+import { fastRoute, getToolsForDomain, determineReasoningLevel, getModelForReasoningLevel } from '../router/fast-router.js';
 import type { CommandTrace } from '@kacung/types';
 
 export interface AgentRuntimeOptions {
@@ -252,7 +253,7 @@ export class AgentRuntime {
     const requestId = options.requestId || `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const startTime = Date.now();
     const query = (userInput || '').trim();
-    const model = this.getModelName();
+    const defaultModel = this.getModelName();
     const maxSteps = options.maxSteps || 8;
     const steps: AgentStep[] = [];
 
@@ -272,13 +273,124 @@ export class AgentRuntime {
       timestamp: startTime,
       requestId,
       transcript: query,
-      model,
+      model: defaultModel,
     });
     this.setState('thinking', { requestId, query });
 
+    // ══════════════════════════════════════════════════════════════════════
+    // FAST COMMAND ROUTER (Sections 3, 4, 12, 23)
+    // Bypass LLM entirely for deterministic commands
+    // ══════════════════════════════════════════════════════════════════════
+    const routerStartTime = Date.now();
+    const routeResult = fastRoute(query);
+    const routerDurationMs = Date.now() - routerStartTime;
+
+    this.logger.info('Fast router result', {
+      requestId,
+      matched: routeResult.matched,
+      toolDomain: routeResult.toolDomain,
+      routerDurationMs,
+      toolCallCount: routeResult.toolCalls?.length || 0,
+    });
+
+    if (routeResult.matched) {
+      // Handle clarification (e.g. WhatsApp with missing message)
+      if (routeResult.clarificationText) {
+        this.setState('idle');
+        return {
+          text: routeResult.clarificationText,
+          steps: [],
+          completed: true,
+        };
+      }
+
+      // Direct deterministic execution — NO LLM NEEDED
+      if (routeResult.toolCalls && routeResult.toolCalls.length > 0) {
+        this.setState('executing', { requestId, toolCalls: routeResult.toolCalls.map((tc) => tc.name) });
+        this.emitEvent('tool_start', {
+          toolName: routeResult.toolCalls[0].name,
+          parameters: routeResult.toolCalls[0].parameters,
+          fastRoute: true,
+        });
+
+        const executedCalls: ExecutedToolCall[] = [];
+        const fastStep: AgentStep = { stepIndex: 1, toolCalls: routeResult.toolCalls };
+
+        // Parallel execution for independent actions (Section 12)
+        if (routeResult.isParallel && routeResult.toolCalls.length > 1) {
+          const results = await Promise.all(
+            routeResult.toolCalls.map((tc) => this.toolExecutor.execute(tc.name, tc.parameters, tc.id))
+          );
+          executedCalls.push(...results);
+        } else {
+          // Sequential execution
+          for (const tc of routeResult.toolCalls) {
+            if (abortController.signal.aborted) break;
+            const toolStart = Date.now();
+            this.emitEvent('tool_start', { toolName: tc.name, parameters: tc.parameters });
+            const executed = await this.toolExecutor.execute(tc.name, tc.parameters, tc.id);
+            const toolDur = Date.now() - toolStart;
+            this.logger.info('Tool execution completed (fast-route)', {
+              requestId, tool: tc.name, result: executed.result.success ? 'success' : 'failure', durationMs: toolDur,
+            });
+            this.emitEvent('tool_end', { toolName: tc.name, success: executed.result.success, data: executed.result.data });
+            executedCalls.push(executed);
+          }
+        }
+
+        fastStep.toolResults = executedCalls;
+        steps.push(fastStep);
+
+        const totalDurationMs = Date.now() - startTime;
+        const confirmText = routeResult.confirmText || '✓ Done';
+        const allSuccess = executedCalls.every((ec) => ec.result.success);
+
+        this.logger.info('Fast-route execution completed', {
+          requestId,
+          totalDurationMs,
+          routerDurationMs,
+          toolCallCount: routeResult.toolCalls.length,
+          allSuccess,
+          confirmText,
+        });
+
+        // Add to conversation history for context continuity
+        this.messages.push({ role: 'user', content: query });
+        this.messages.push({ role: 'assistant', content: confirmText });
+
+        // TTS (if enabled)
+        if (confirmText && this.ttsProvider) {
+          this.setState('speaking');
+          this.emitEvent('speech_start', { text: confirmText });
+          try {
+            if (this.ttsProvider.speak) {
+              await this.ttsProvider.speak(confirmText);
+            } else {
+              await this.ttsProvider.synthesize(confirmText);
+            }
+          } catch (ttsErr) {
+            this.logger.warn('TTS playback error', { error: String(ttsErr) });
+          }
+          this.emitEvent('speech_end', { text: confirmText });
+        }
+
+        this.setState('idle');
+        return {
+          text: allSuccess ? confirmText : `Error: ${executedCalls.find((ec) => !ec.result.success)?.result.error || 'unknown'}`,
+          steps,
+          completed: allSuccess,
+          error: allSuccess ? undefined : 'tool_execution_failed',
+        };
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // LLM PATH — for complex commands the fast router cannot handle
+    // ══════════════════════════════════════════════════════════════════════
+
     const parsedCommand = parseCommand(query);
 
-    // 1. Validation check for structured messaging intents (e.g. "WhatsApp Reja Agung terus bilang")
+    // Validation check for structured messaging intents (e.g. "WhatsApp Reja Agung terus bilang")
     if (parsedCommand.isStructured && parsedCommand.primaryIntent) {
       if (parsedCommand.primaryIntent.intent === 'send_whatsapp_message') {
         const validation = validateWhatsAppIntent(parsedCommand.primaryIntent);
@@ -313,6 +425,20 @@ export class AgentRuntime {
       content: query,
     });
 
+    // ── Dynamic Reasoning Level (Section 2) ──
+    const reasoningLevel = determineReasoningLevel(query);
+    const selectedModel = getModelForReasoningLevel(reasoningLevel, defaultModel);
+
+    this.logger.info('Dynamic model selection', {
+      requestId,
+      reasoningLevel,
+      selectedModel,
+      defaultModel,
+    });
+
+    // ── Tool Domain Filtering (Section 14) ──
+    const domainToolNames = getToolsForDomain(routeResult.toolDomain);
+
     try {
       let stepIndex = 0;
       let finalResponse = '';
@@ -330,35 +456,61 @@ export class AgentRuntime {
 
         stepIndex++;
         const currentStep: AgentStep = { stepIndex };
-        const stepStartTime = Date.now();
 
         this.logger.debug(`Step ${stepIndex}/${maxSteps} starting`, { requestId, stepIndex });
         
-        // Filter tools if restricted to milestone 1
+        // Filter tools: first by allowedToolNames, then by domain routing
         const allTools = this.toolExecutor.getRegistry().list();
-        const tools = this.allowedToolNames
+        let tools = this.allowedToolNames
           ? allTools.filter((t) => this.allowedToolNames!.includes(t.name))
           : allTools;
+
+        // Apply domain filtering on first step only (don't filter when tools have been called)
+        if (stepIndex === 1 && domainToolNames && domainToolNames.length > 0) {
+          const domainFiltered = tools.filter((t) => domainToolNames.includes(t.name));
+          // Only use domain filter if it gives us at least 1 tool
+          if (domainFiltered.length > 0) {
+            tools = domainFiltered;
+            this.logger.info('Tool domain filter applied', {
+              requestId,
+              domain: routeResult.toolDomain,
+              filteredToolCount: tools.length,
+              totalToolCount: allTools.length,
+            });
+          }
+        }
 
         // Prune history to enforce sliding context window before dispatching
         this.pruneConversationHistory();
 
-        // 1. LLM completion lifecycle with auto-recovery on token overflow
+        // LLM completion with dynamic model
         const llmStartTime = Date.now();
         this.logger.info('LLM request dispatched', {
           timestamp: llmStartTime,
           requestId,
           stepIndex,
-          model,
+          model: selectedModel,
+          reasoningLevel,
         });
 
         let completion;
         try {
+          // Override the provider's model temporarily for dynamic routing
+          const originalModel = (this.llmProvider as unknown as { model?: string }).model;
+          if (selectedModel && originalModel) {
+            (this.llmProvider as unknown as { model: string }).model = selectedModel;
+          }
+
           completion = await this.llmProvider.complete({
             messages: this.messages,
             tools,
             temperature: options.temperature,
           });
+
+          // Restore original model
+          if (originalModel) {
+            (this.llmProvider as unknown as { model: string }).model = originalModel;
+          }
         } catch (llmErr) {
           const errMsg = llmErr instanceof Error ? llmErr.message : String(llmErr);
           if (
@@ -397,12 +549,12 @@ export class AgentRuntime {
           timestamp: Date.now(),
           requestId,
           stepIndex,
-          model,
+          model: selectedModel,
           durationMs: llmDurationMs,
           toolCallsCount: completion.toolCalls?.length || 0,
         });
 
-        // 2. Check if LLM requested tool calls
+        // Check if LLM requested tool calls
         if (completion.toolCalls && completion.toolCalls.length > 0) {
           currentStep.toolCalls = completion.toolCalls;
           this.setState('executing', { requestId, toolCalls: completion.toolCalls.map((tc) => tc.name) });
@@ -423,7 +575,7 @@ export class AgentRuntime {
 
           const executedCalls: ExecutedToolCall[] = [];
 
-          // 3. Execute tools sequentially
+          // Execute tools sequentially
           for (const tc of completion.toolCalls) {
             // Guard: Enforce authoritative verbatim message and recipient preservation
             if (
@@ -474,7 +626,7 @@ export class AgentRuntime {
               console.log('USER:');
               console.log(query);
               console.log('\nMODEL:');
-              console.log(model);
+              console.log(selectedModel);
               console.log('\nTOOL:');
               console.log(tc.name);
               console.log('\nARGUMENTS:');
@@ -536,7 +688,7 @@ export class AgentRuntime {
           console.log('USER:');
           console.log(query);
           console.log('\nMODEL:');
-          console.log(model);
+          console.log(selectedModel);
           console.log('\nTOOL:');
           console.log('none (conversational response)');
           console.log('\nRESULT:');
@@ -556,9 +708,13 @@ export class AgentRuntime {
       this.logger.info('Agent run completed', {
         timestamp: Date.now(),
         requestId,
-        model,
+        model: selectedModel,
+        reasoningLevel,
         totalSteps: steps.length,
         executionDurationMs: totalDurationMs,
+        routerDurationMs,
+        fastRouteMatched: routeResult.matched,
+        toolDomain: routeResult.toolDomain,
       });
 
       // Voice output (TTS)
@@ -591,7 +747,7 @@ export class AgentRuntime {
         timestamp: Date.now(),
         requestId,
         transcript: query,
-        model,
+        model: selectedModel,
         durationMs: totalDurationMs,
         error: errorMsg,
       });
@@ -618,7 +774,7 @@ export class AgentRuntime {
       ) {
         friendlyText = 'Gue nggak bisa terhubung ke AI karena API key 9Router belum dikonfigurasi dengan benar di file .env.';
       } else if (lower.includes('model') && (lower.includes('not found') || lower.includes('unavailable') || lower.includes('404'))) {
-        friendlyText = `Model AI "${model}" tidak tersedia di 9Router.`;
+        friendlyText = `Model AI "${selectedModel}" tidak tersedia di 9Router.`;
       } else if (lower.includes('timeout')) {
         friendlyText = 'AI membutuhkan waktu terlalu lama untuk merespons (timeout).';
       }

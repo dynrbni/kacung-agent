@@ -4,37 +4,23 @@ import type { LLMProvider, LLMCompletionOptions, LLMCompletionResponse } from '@
 import { ToolExecutor } from '@kacung/tools';
 
 describe('Kacung Agent & 9Router Acceptance Tests', () => {
-  it('Acceptance Test 1: "Buka Spotify" -> open_app("Spotify") tool execution -> final response', async () => {
-    let callCount = 0;
+  // ──────────────────────────────────────────────────────────────────────
+  // Fast-Route Tests: Simple commands bypass LLM entirely
+  // ──────────────────────────────────────────────────────────────────────
+
+  it('Acceptance Test 1: "Buka Spotify" -> fast-route bypasses LLM entirely', async () => {
+    let llmCalled = false;
     const mock9RouterLLM: LLMProvider = {
       name: 'ninerouter',
       model: 'ag/gemini-3.8-flash-high',
       baseUrl: 'http://localhost:20128/v1',
-      async complete(options: LLMCompletionOptions): Promise<LLMCompletionResponse> {
-        callCount++;
-        if (callCount === 1) {
-          // Model decides to call open_app tool
-          return {
-            content: null,
-            toolCalls: [
-              {
-                id: 'call_spotify_1',
-                name: 'open_app',
-                parameters: { appName: 'Spotify' },
-              },
-            ],
-          };
-        }
-        // Model receives tool result and provides final response
-        return {
-          content: 'Siap bos, aplikasi Spotify sudah berhasil dibuka!',
-          toolCalls: [],
-        };
+      async complete(): Promise<LLMCompletionResponse> {
+        llmCalled = true;
+        return { content: 'should not reach here', toolCalls: [] };
       },
     };
 
     const executor = new ToolExecutor();
-    // Spy on tool execution
     const executeSpy = vi.spyOn(executor, 'execute');
 
     const agent = new KacungAgent({
@@ -47,37 +33,23 @@ describe('Kacung Agent & 9Router Acceptance Tests', () => {
     const result = await agent.handleTranscript('Buka Spotify');
 
     expect(result.completed).toBe(true);
-    expect(result.steps.length).toBe(2);
-    expect(executeSpy).toHaveBeenCalledWith('open_app', { appName: 'Spotify' }, 'call_spotify_1');
+    expect(llmCalled).toBe(false); // LLM was never called!
+    expect(result.steps.length).toBe(1);
     expect(result.steps[0].toolCalls?.[0].name).toBe('open_app');
     expect(result.steps[0].toolCalls?.[0].parameters).toEqual({ appName: 'Spotify' });
-    expect(result.text).toBe('Siap bos, aplikasi Spotify sudah berhasil dibuka!');
+    expect(executeSpy).toHaveBeenCalledWith('open_app', { appName: 'Spotify' }, expect.any(String));
+    expect(result.text).toContain('Opening Spotify');
   });
 
-  it('Acceptance Test 2: "Buka Safari" -> open_app("Safari") tool execution -> final response', async () => {
-    let callCount = 0;
+  it('Acceptance Test 2: "Buka Safari" -> fast-route bypasses LLM entirely', async () => {
+    let llmCalled = false;
     const mock9RouterLLM: LLMProvider = {
       name: 'ninerouter',
       model: 'ag/gemini-3.8-flash-high',
       baseUrl: 'http://localhost:20128/v1',
-      async complete(options: LLMCompletionOptions): Promise<LLMCompletionResponse> {
-        callCount++;
-        if (callCount === 1) {
-          return {
-            content: null,
-            toolCalls: [
-              {
-                id: 'call_safari_1',
-                name: 'open_app',
-                parameters: { appName: 'Safari' },
-              },
-            ],
-          };
-        }
-        return {
-          content: 'Safari sudah terbuka, silakan browsing!',
-          toolCalls: [],
-        };
+      async complete(): Promise<LLMCompletionResponse> {
+        llmCalled = true;
+        return { content: 'should not reach here', toolCalls: [] };
       },
     };
 
@@ -94,9 +66,14 @@ describe('Kacung Agent & 9Router Acceptance Tests', () => {
     const result = await agent.handleTranscript('Buka Safari');
 
     expect(result.completed).toBe(true);
-    expect(executeSpy).toHaveBeenCalledWith('open_app', { appName: 'Safari' }, 'call_safari_1');
-    expect(result.text).toBe('Safari sudah terbuka, silakan browsing!');
+    expect(llmCalled).toBe(false);
+    expect(executeSpy).toHaveBeenCalledWith('open_app', { appName: 'Safari' }, expect.any(String));
+    expect(result.text).toContain('Opening Safari');
   });
+
+  // ──────────────────────────────────────────────────────────────────────
+  // LLM-Path Tests: Complex commands still use LLM
+  // ──────────────────────────────────────────────────────────────────────
 
   it('Acceptance Test 3: "What is the capital of Indonesia?" -> Direct response without tool call', async () => {
     let toolExecutionOccurred = false;
@@ -141,6 +118,10 @@ describe('Kacung Agent & 9Router Acceptance Tests', () => {
     expect(result.text).toContain('Jakarta');
   });
 
+  // ──────────────────────────────────────────────────────────────────────
+  // Error Handling: Use non-fast-routable commands to test LLM errors
+  // ──────────────────────────────────────────────────────────────────────
+
   it('Error handling: Clean message when 9Router connection is unavailable', async () => {
     const broken9RouterLLM: LLMProvider = {
       name: 'ninerouter',
@@ -157,7 +138,8 @@ describe('Kacung Agent & 9Router Acceptance Tests', () => {
       debug: false,
     });
 
-    const result = await agent.handleTranscript('Buka Spotify');
+    // Use a command that won't be fast-routed
+    const result = await agent.handleTranscript('Explain quantum computing to me');
 
     expect(result.completed).toBe(false);
     expect(result.error).toContain('ECONNREFUSED');
@@ -180,7 +162,8 @@ describe('Kacung Agent & 9Router Acceptance Tests', () => {
       debug: false,
     });
 
-    const result = await agent.handleTranscript('Buka Spotify');
+    // Use a command that won't be fast-routed
+    const result = await agent.handleTranscript('Explain the theory of relativity');
 
     expect(result.completed).toBe(false);
     expect(result.text).toBe('Gue nggak bisa terhubung ke AI karena API key 9Router belum dikonfigurasi dengan benar di file .env.');
@@ -209,29 +192,18 @@ describe('Kacung Agent & 9Router Acceptance Tests', () => {
     expect(result.text).toBe('Maaf, suara tidak terdeteksi. Bisa diulang kembali?');
   });
 
-  it('Acceptance Test 4: "Putar Bruno Mars di Spotify" -> play_music tool execution', async () => {
-    let callCount = 0;
+  // ──────────────────────────────────────────────────────────────────────
+  // Fast-Route: Music and WhatsApp
+  // ──────────────────────────────────────────────────────────────────────
+
+  it('Acceptance Test 4: "Putar Bruno Mars di Spotify" -> fast-route play_music', async () => {
+    let llmCalled = false;
     const mock9RouterLLM: LLMProvider = {
       name: 'ninerouter',
       model: 'ag/gemini-3.8-flash-high',
       async complete(): Promise<LLMCompletionResponse> {
-        callCount++;
-        if (callCount === 1) {
-          return {
-            content: null,
-            toolCalls: [
-              {
-                id: 'call_music_1',
-                name: 'play_music',
-                parameters: { query: 'Bruno Mars', app: 'spotify' },
-              },
-            ],
-          };
-        }
-        return {
-          content: 'Siap bos, lagu Bruno Mars sedang diputar di Spotify.',
-          toolCalls: [],
-        };
+        llmCalled = true;
+        return { content: 'should not reach here', toolCalls: [] };
       },
     };
 
@@ -248,37 +220,23 @@ describe('Kacung Agent & 9Router Acceptance Tests', () => {
     const result = await agent.handleTranscript('Putar Bruno Mars di Spotify');
 
     expect(result.completed).toBe(true);
+    expect(llmCalled).toBe(false);
     expect(executeSpy).toHaveBeenCalledWith(
       'play_music',
-      { query: 'Bruno Mars', app: 'spotify' },
-      'call_music_1'
+      { query: 'Bruno Mars', app: 'auto' },
+      expect.any(String)
     );
-    expect(result.text).toBe('Siap bos, lagu Bruno Mars sedang diputar di Spotify.');
+    expect(result.text).toContain('Playing Bruno Mars');
   });
 
-  it('Acceptance Test 5: "Chat Andi di WhatsApp, bilang gue telat 15 menit" -> send_whatsapp_message', async () => {
-    let callCount = 0;
+  it('Acceptance Test 5: "Chat Andi di WhatsApp, bilang gue telat 15 menit" -> fast-route send_whatsapp_message', async () => {
+    let llmCalled = false;
     const mock9RouterLLM: LLMProvider = {
       name: 'ninerouter',
       model: 'ag/gemini-3.8-flash-high',
       async complete(): Promise<LLMCompletionResponse> {
-        callCount++;
-        if (callCount === 1) {
-          return {
-            content: null,
-            toolCalls: [
-              {
-                id: 'call_wa_1',
-                name: 'send_whatsapp_message',
-                parameters: { contact: 'Andi', message: 'gue telat 15 menit' },
-              },
-            ],
-          };
-        }
-        return {
-          content: 'Beres bos, pesan sudah terkirim ke Andi lewat WhatsApp.',
-          toolCalls: [],
-        };
+        llmCalled = true;
+        return { content: 'should not reach here', toolCalls: [] };
       },
     };
 
@@ -295,12 +253,13 @@ describe('Kacung Agent & 9Router Acceptance Tests', () => {
     const result = await agent.handleTranscript('Chat Andi di WhatsApp, bilang gue telat 15 menit');
 
     expect(result.completed).toBe(true);
+    expect(llmCalled).toBe(false);
     expect(executeSpy).toHaveBeenCalledWith(
       'send_whatsapp_message',
-      { contact: 'Andi', message: 'gue telat 15 menit' },
-      'call_wa_1'
+      { recipient: 'Andi', message: 'gue telat 15 menit' },
+      expect.any(String)
     );
-    expect(result.text).toBe('Beres bos, pesan sudah terkirim ke Andi lewat WhatsApp.');
+    expect(result.text).toContain('Sending WhatsApp');
   });
 
   it('Acceptance Test 6: Cancellation command "Stop" terminates task immediately', async () => {
@@ -325,4 +284,3 @@ describe('Kacung Agent & 9Router Acceptance Tests', () => {
     expect(agent.getState()).toBe('idle');
   });
 });
-

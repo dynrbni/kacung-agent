@@ -30,22 +30,16 @@ describe('AgentRuntime', () => {
     expect(stateEvents.length).toBeGreaterThan(0);
   });
 
-  it('handles tool execution and feeds observation back to model', async () => {
-    const mockLLM = new MockLLMProvider([
-      {
-        content: 'Membuka Spotify...',
-        toolCalls: [
-          {
-            id: 'call_1',
-            name: 'run_command',
-            parameters: { command: 'pwd' },
-          },
-        ],
+  it('fast-routes simple open_app commands without LLM', async () => {
+    let llmCalled = false;
+    const mockLLM = {
+      name: 'mock',
+      model: 'test-model',
+      async complete() {
+        llmCalled = true;
+        return { content: 'should not reach here', toolCalls: [] };
       },
-      {
-        content: 'Spotify sudah berhasil dibuka!',
-      },
-    ]);
+    };
 
     const executor = new ToolExecutor({
       confirmSensitive: false,
@@ -59,10 +53,46 @@ describe('AgentRuntime', () => {
     const result = await runtime.run('Buka Spotify');
 
     expect(result.completed).toBe(true);
+    expect(llmCalled).toBe(false); // LLM should be bypassed
+    expect(result.steps.length).toBe(1);
+    expect(result.steps[0].toolCalls?.[0].name).toBe('open_app');
+    expect(result.text).toContain('Opening Spotify');
+  });
+
+  it('handles tool execution via LLM path for complex commands', async () => {
+    const mockLLM = new MockLLMProvider([
+      {
+        content: 'Menjalankan command...',
+        toolCalls: [
+          {
+            id: 'call_1',
+            name: 'run_command',
+            parameters: { command: 'pwd' },
+          },
+        ],
+      },
+      {
+        content: 'Command berhasil dijalankan!',
+      },
+    ]);
+
+    const executor = new ToolExecutor({
+      confirmSensitive: false,
+    });
+
+    const runtime = new AgentRuntime({
+      llmProvider: mockLLM,
+      toolExecutor: executor,
+    });
+
+    // Use a command that won't be fast-routed
+    const result = await runtime.run('Jalankan command pwd di terminal dan tampilkan hasilnya');
+
+    expect(result.completed).toBe(true);
     expect(result.steps.length).toBe(2);
     expect(result.steps[0].toolCalls?.length).toBe(1);
     expect(result.steps[0].toolResults?.length).toBe(1);
-    expect(result.text).toBe('Spotify sudah berhasil dibuka!');
+    expect(result.text).toBe('Command berhasil dijalankan!');
   });
 
   it('supports multi-step workflows gracefully', async () => {
@@ -101,7 +131,8 @@ describe('AgentRuntime', () => {
       toolExecutor: executor,
     });
 
-    const result = await runtime.run('Buka terminal dan buat file');
+    // Use a command that won't be fast-routed
+    const result = await runtime.run('Jalankan echo step 1 lalu tulis file konfigurasi baru');
 
     expect(result.completed).toBe(true);
     expect(result.steps.length).toBe(3);
@@ -186,7 +217,9 @@ describe('AgentRuntime', () => {
       debug: false,
     });
 
-    const res = await runtime.run('Ambil screenshot');
+    // Use a command that won't be fast-routed (screenshot IS fast-routed)
+    // so we need to use a non-fast-routable command that triggers LLM
+    const res = await runtime.run('Take a full-resolution screenshot of the current window and analyze it');
     expect(res.completed).toBe(true);
 
     const messages = runtime.getMessages();

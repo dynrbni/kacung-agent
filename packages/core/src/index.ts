@@ -13,3 +13,4 @@ export * from './agent/runtime.js';
 export * from './agent/agent.js';
 export * from './transcript/index.js';
 export * from './parser/index.js';
+export * from './router/index.js';
