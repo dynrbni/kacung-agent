@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct DynamicIslandShape: Shape {
-    var cornerRadius: CGFloat = 18
+    var cornerRadius: CGFloat = 10
     var hasNotch: Bool = true
 
     func path(in rect: CGRect) -> Path {
@@ -41,7 +41,7 @@ struct DynamicIslandShape: Shape {
 }
 
 struct DynamicIslandBorderShape: Shape {
-    var cornerRadius: CGFloat = 18
+    var cornerRadius: CGFloat = 10
     var hasNotch: Bool = true
 
     func path(in rect: CGRect) -> Path {
@@ -83,18 +83,18 @@ public struct FloatingOverlayView: View {
     @FocusState private var isInputFocused: Bool
     @State private var hasCopied: Bool = false
 
+    private var notchHeight: CGFloat {
+        appState.notchTopInset > 0 ? appState.notchTopInset : 32.0
+    }
+    private let notchWidth: CGFloat = 179.0
+    private let activeWidth: CGFloat = 520.0
+    private let wingWidth: CGFloat = 170.0
+
     private var promptText: String {
         if !appState.liveTranscript.isEmpty {
             return appState.liveTranscript
         }
         return appState.inputText
-    }
-
-    private var topPadding: CGFloat {
-        if appState.notchTopInset > 0 {
-            return appState.notchTopInset + 4.0
-        }
-        return 10.0
     }
 
     public init(appState: AppState) {
@@ -103,76 +103,95 @@ public struct FloatingOverlayView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            // Main Solid Jet Black Notch Island
-            VStack(spacing: 8) {
-                // Header Capsule (matches MacBook Notch visual extension)
-                HStack(spacing: 10) {
-                    // Left: Glowing Animated Kacung Indicator
-                    HStack(spacing: 8) {
+            VStack(spacing: 0) {
+                // Main Horizontal Notch Bar (flushed with physical notch height)
+                HStack(spacing: 0) {
+                    // Left Wing (Left of camera notch)
+                    HStack(spacing: 7) {
                         ZStack {
                             Circle()
                                 .fill(stateColor.opacity(0.3))
-                                .frame(width: 24, height: 24)
+                                .frame(width: 18, height: 18)
 
                             Circle()
-                                .stroke(stateColor, lineWidth: 1.8)
-                                .frame(width: 24, height: 24)
-                                .scaleEffect(appState.state == .listening ? (1.0 + CGFloat(appState.audioLevel * 0.4)) : 1.0)
+                                .stroke(stateColor, lineWidth: 1.5)
+                                .scaleEffect(appState.state == .listening ? (1.0 + CGFloat(appState.audioLevel * 0.35)) : 1.0)
                                 .animation(.easeOut(duration: 0.1), value: appState.audioLevel)
 
                             Image(systemName: stateIconName)
-                                .font(.system(size: 11, weight: .bold))
+                                .font(.system(size: 8.5, weight: .bold))
                                 .foregroundColor(stateColor)
                         }
 
                         VStack(alignment: .leading, spacing: 0) {
                             Text("KACUNG")
-                                .font(.system(size: 9, weight: .black, design: .rounded))
+                                .font(.system(size: 7.5, weight: .black, design: .rounded))
                                 .foregroundColor(.gray)
 
                             Text(appState.state.title)
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(.system(size: 10, weight: .semibold))
                                 .foregroundColor(.white)
-                        }
-                    }
-
-                    Spacer()
-
-                    // Center: Real-time Transcribed Speech Text
-                    if appState.state == .listening {
-                        if !appState.liveTranscript.isEmpty {
-                            Text("\"\(appState.liveTranscript)\"")
-                                .font(.system(size: 12, weight: .medium, design: .rounded))
-                                .foregroundColor(.cyan)
                                 .lineLimit(1)
-                                .truncationMode(.tail)
-                                .frame(maxWidth: 180)
-                        } else {
-                            Text("Mendengarkan...")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(.gray)
                         }
-                    } else if appState.state == .thinking || appState.state == .executing {
-                        HStack(spacing: 5) {
-                            ProgressView()
-                                .controlSize(.mini)
-                            Text(appState.state == .executing ? "Menjalankan..." : "Memproses...")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(.purple)
-                        }
-                    } else if !appState.lastResponse.isEmpty && !appState.isOutputExpanded {
-                        Text(appState.lastResponse)
-                            .font(.system(size: 11))
-                            .foregroundColor(.white.opacity(0.9))
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .frame(maxWidth: 180)
+
+                        Spacer(minLength: 0)
                     }
+                    .padding(.leading, 12)
+                    .frame(width: wingWidth, height: notchHeight)
+                    .opacity(appState.isVisibleOnScreen ? 1.0 : 0.0)
+                    .offset(x: appState.isVisibleOnScreen ? 0 : 45)
 
-                    Spacer()
+                    // Center Gap (Directly over physical webcam notch cutout)
+                    Color.clear
+                        .frame(width: notchWidth, height: notchHeight)
 
-                    // Right: Audio Waveform Animation + Hotkey badge
+                    // Right Wing (Right of camera notch)
                     HStack(spacing: 6) {
+                        Spacer(minLength: 0)
+
+                        // Real-time transcribed speech text or status
+                        if appState.state == .listening {
+                            if !appState.liveTranscript.isEmpty {
+                                Text("\"\(appState.liveTranscript)\"")
+                                    .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                                    .foregroundColor(.cyan)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                                    .frame(maxWidth: 70)
+                            } else {
+                                Text("Mendengarkan...")
+                                    .font(.system(size: 9.5, weight: .medium))
+                                    .foregroundColor(.gray)
+                            }
+                        } else if appState.state == .thinking || appState.state == .executing {
+                            HStack(spacing: 4) {
+                                ProgressView()
+                                    .controlSize(.mini)
+                                Text(appState.state == .executing ? "Jalan..." : "Proses...")
+                                    .font(.system(size: 9.5, weight: .medium))
+                                    .foregroundColor(.purple)
+                            }
+                        } else if !appState.lastResponse.isEmpty && !appState.isOutputExpanded {
+                            Button(action: {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    appState.isOutputExpanded = true
+                                }
+                            }) {
+                                HStack(spacing: 3) {
+                                    Text(appState.lastResponse)
+                                        .font(.system(size: 9.5))
+                                        .foregroundColor(.white.opacity(0.9))
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                        .frame(maxWidth: 75)
+                                    Image(systemName: "chevron.down")
+                                        .font(.system(size: 7, weight: .bold))
+                                        .foregroundColor(.cyan.opacity(0.8))
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+
                         // Right-side voice wave visualizer
                         if appState.state == .listening || appState.audioLevel > 0.04 {
                             NotchAudioWaveView(
@@ -184,11 +203,11 @@ public struct FloatingOverlayView: View {
 
                         // Hotkey badge
                         Text("⌃⌥")
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2.5)
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 2)
                             .background(Color.white.opacity(0.12))
-                            .cornerRadius(4)
+                            .cornerRadius(3.5)
                             .foregroundColor(.white.opacity(0.75))
 
                         // Dismiss button
@@ -196,34 +215,21 @@ public struct FloatingOverlayView: View {
                             appState.hideOverlay()
                         }) {
                             Image(systemName: "xmark")
-                                .font(.system(size: 9, weight: .bold))
+                                .font(.system(size: 8, weight: .bold))
                                 .foregroundColor(.gray)
-                                .padding(3)
+                                .padding(2)
                         }
                         .buttonStyle(.plain)
                     }
+                    .padding(.trailing, 10)
+                    .frame(width: wingWidth, height: notchHeight)
+                    .opacity(appState.isVisibleOnScreen ? 1.0 : 0.0)
+                    .offset(x: appState.isVisibleOnScreen ? 0 : -45)
                 }
+                .frame(height: notchHeight)
 
-                // Error Message if present
-                if let error = appState.errorMessage {
-                    HStack(spacing: 6) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 10))
-                            .foregroundColor(.red)
-                        Text(error)
-                            .font(.system(size: 10))
-                            .foregroundColor(.red)
-                            .lineLimit(2)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.red.opacity(0.15))
-                    .cornerRadius(6)
-                }
-
-                // Response Card (when AI has responded and expanded view requested)
-                if !appState.lastResponse.isEmpty && appState.isOutputExpanded {
+                // Optional Expanded Output Card (only when user clicks to see details)
+                if appState.isOutputExpanded && !appState.lastResponse.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             Label("Detail Perintah", systemImage: "text.bubble.fill")
@@ -256,7 +262,7 @@ public struct FloatingOverlayView: View {
                             .buttonStyle(.plain)
 
                             Button(action: {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                                     appState.isOutputExpanded = false
                                 }
                             }) {
@@ -280,49 +286,27 @@ public struct FloatingOverlayView: View {
                             .foregroundColor(.white)
                             .lineLimit(4)
                     }
-                    .padding(8)
+                    .padding(10)
                     .background(Color.white.opacity(0.06))
                     .cornerRadius(8)
-                }
-
-                // If user clicks compact response to toggle full details
-                if !appState.lastResponse.isEmpty && !appState.isOutputExpanded && appState.state != .listening {
-                    Button(action: {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                            appState.isOutputExpanded = true
-                        }
-                    }) {
-                        HStack {
-                            Text("Lihat detail respons")
-                                .font(.system(size: 10))
-                                .foregroundColor(.cyan.opacity(0.8))
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 8, weight: .bold))
-                                .foregroundColor(.cyan.opacity(0.8))
-                            Spacer()
-                        }
-                        .padding(.horizontal, 4)
-                    }
-                    .buttonStyle(.plain)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 8)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.top, topPadding)
-            .padding(.bottom, 10)
-            .frame(width: 400)
+            .frame(width: appState.isVisibleOnScreen ? activeWidth : notchWidth)
+            .clipped()
             .background(
-                // Pure Solid Jet Black seamless with MacBook Notch
-                DynamicIslandShape(cornerRadius: 18, hasNotch: appState.notchTopInset > 0)
+                DynamicIslandShape(cornerRadius: 10, hasNotch: appState.notchTopInset > 0)
                     .fill(Color.black)
             )
             .overlay(
-                DynamicIslandBorderShape(cornerRadius: 18, hasNotch: appState.notchTopInset > 0)
+                DynamicIslandBorderShape(cornerRadius: 10, hasNotch: appState.notchTopInset > 0)
                     .stroke(Color.white.opacity(0.12), lineWidth: 0.8)
             )
-            .shadow(color: Color.black.opacity(0.6), radius: 14, x: 0, y: 7)
-            .offset(y: appState.isVisibleOnScreen ? 0 : -(appState.notchTopInset + 90))
-            .opacity(appState.isVisibleOnScreen ? 1.0 : 0.0)
-            .animation(.spring(response: 0.35, dampingFraction: 0.76), value: appState.isVisibleOnScreen)
+            .shadow(color: Color.black.opacity(0.4), radius: 8, x: 0, y: 3)
+            .animation(.spring(response: 0.38, dampingFraction: 0.78), value: appState.isVisibleOnScreen)
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: appState.isOutputExpanded)
 
             Spacer(minLength: 0)
         }

@@ -21,9 +21,9 @@ public struct NotchAudioWaveView: View {
                     let phase = Double(index) * 0.9
                     let ambientPulse = isListening ? CGFloat(sin(time * 7.0 + phase) * 0.2 + 0.2) : 0.0
 
-                    let levelScaled = CGFloat(audioLevel) * 22.0 * multiplier
-                    let dynamicHeight = 4.0 + ambientPulse * 5.0 + levelScaled
-                    let clampedHeight = min(max(dynamicHeight, 4.0), 26.0)
+                    let levelScaled = CGFloat(audioLevel) * 14.0 * multiplier
+                    let dynamicHeight = 3.0 + ambientPulse * 3.5 + levelScaled
+                    let clampedHeight = min(max(dynamicHeight, 3.0), 16.0)
 
                     Capsule()
                         .fill(
@@ -37,19 +37,19 @@ public struct NotchAudioWaveView: View {
                                 endPoint: .bottom
                             )
                         )
-                        .frame(width: 3.2, height: clampedHeight)
+                        .frame(width: 2.5, height: clampedHeight)
                         .shadow(
                             color: Color.cyan.opacity(Double(audioLevel) * 0.8 + (isListening ? 0.3 : 0.0)),
-                            radius: 3,
+                            radius: 2,
                             x: 0,
                             y: 0
                         )
                         .animation(.easeOut(duration: 0.08), value: audioLevel)
                 }
             }
-            .frame(height: 28)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
+            .frame(height: 20)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1.5)
             .background(Color.white.opacity(0.08))
             .clipShape(Capsule())
             .overlay(

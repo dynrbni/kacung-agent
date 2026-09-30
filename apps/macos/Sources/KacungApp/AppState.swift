@@ -88,7 +88,7 @@ public final class AppState: ObservableObject {
         updateNotchMetrics()
         let notchScreen = getNotchScreen()
         let screenFrame = notchScreen.frame
-        let windowWidth: CGFloat = 420.0
+        let windowWidth: CGFloat = 560.0
         let windowHeight: CGFloat = 240.0
         let x = screenFrame.midX - (windowWidth / 2.0)
         let y = screenFrame.maxY - windowHeight
