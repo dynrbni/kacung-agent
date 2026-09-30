@@ -86,71 +86,99 @@ export class NineRouterProvider implements LLMProvider {
       };
     });
 
-    try {
-      const response = await this.client.chat.completions.create({
-        model: this.model,
-        messages: formattedMessages,
-        tools: formattedTools,
-        temperature: options.temperature ?? 0.3,
-        max_tokens: options.maxTokens ?? 2048,
-      });
+    const candidateModels = Array.from(
+      new Set([
+        this.model,
+        'ag/gemini-3.8-flash-high',
+        'nara/gemini-3.8-flash-high',
+        'ag/gemini-3.8-flash',
+        'gc/gemini-2.5-flash',
+      ])
+    );
 
-      const choice = response.choices?.[0]?.message;
-      if (!choice) {
-        return { content: '', rawResponse: response };
-      }
+    let lastError: unknown = null;
 
-      const toolCalls: ToolCallRequest[] = [];
-      if (choice.tool_calls && choice.tool_calls.length > 0) {
-        for (const tc of choice.tool_calls) {
-          if (tc.type === 'function' && tc.function) {
-            try {
-              toolCalls.push({
-                id: tc.id,
-                name: tc.function.name,
-                parameters: JSON.parse(tc.function.arguments || '{}'),
-              });
-            } catch {
-              toolCalls.push({
-                id: tc.id,
-                name: tc.function.name,
-                parameters: {},
-              });
+    for (const targetModel of candidateModels) {
+      try {
+        const response = await this.client.chat.completions.create({
+          model: targetModel,
+          messages: formattedMessages,
+          tools: formattedTools,
+          temperature: options.temperature ?? 0.3,
+          max_tokens: options.maxTokens ?? 2048,
+        });
+
+        const choice = response.choices?.[0]?.message;
+        if (!choice) {
+          return { content: '', rawResponse: response };
+        }
+
+        const toolCalls: ToolCallRequest[] = [];
+        if (choice.tool_calls && choice.tool_calls.length > 0) {
+          for (const tc of choice.tool_calls) {
+            if (tc.type === 'function' && tc.function) {
+              try {
+                toolCalls.push({
+                  id: tc.id,
+                  name: tc.function.name,
+                  parameters: JSON.parse(tc.function.arguments || '{}'),
+                });
+              } catch {
+                toolCalls.push({
+                  id: tc.id,
+                  name: tc.function.name,
+                  parameters: {},
+                });
+              }
             }
           }
         }
-      }
 
-      return {
-        content: choice.content || null,
-        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-        rawResponse: response,
-      };
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      
-      // Friendly, clean error categorization
-      if (message.includes('ECONNREFUSED') || message.includes('fetch failed') || message.includes('ENOTFOUND')) {
-        throw new Error(
-          `Gue nggak bisa terhubung ke 9Router di ${this.baseUrl}. Pastikan 9Router sedang berjalan.`
-        );
+        return {
+          content: choice.content || null,
+          toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+          rawResponse: response,
+        };
+      } catch (err: unknown) {
+        lastError = err;
+        const msg = err instanceof Error ? err.message : String(err);
+        // If connection refused or 401 auth error, fail immediately without rotating models
+        if (
+          msg.includes('ECONNREFUSED') ||
+          msg.includes('fetch failed') ||
+          msg.includes('ENOTFOUND') ||
+          msg.includes('401') ||
+          msg.includes('Unauthorized') ||
+          msg.includes('Incorrect API key')
+        ) {
+          break;
+        }
+        // Otherwise continue loop to try fallback model
       }
-      if (message.includes('401') || message.includes('Unauthorized') || message.includes('Incorrect API key')) {
-        throw new Error(
-          'Autentikasi 9Router gagal. Periksa kembali NINEROUTER_API_KEY di file .env Anda.'
-        );
-      }
-      if (message.includes('404') || message.includes('model_not_found') || message.includes('does not exist')) {
-        throw new Error(
-          `Model "${this.model}" tidak ditemukan di 9Router. Periksa konfigurasi NINEROUTER_MODEL.`
-        );
-      }
-      if (message.includes('timeout') || message.includes('ETIMEDOUT')) {
-        throw new Error('Permintaan ke 9Router mengalami batas waktu (timeout).');
-      }
-
-      throw new Error(`9Router error: ${message}`);
     }
+
+    const message = lastError instanceof Error ? lastError.message : String(lastError);
+
+    // Friendly, clean error categorization
+    if (message.includes('ECONNREFUSED') || message.includes('fetch failed') || message.includes('ENOTFOUND')) {
+      throw new Error(
+        `Gue nggak bisa terhubung ke 9Router di ${this.baseUrl}. Pastikan 9Router sedang berjalan.`
+      );
+    }
+    if (message.includes('401') || message.includes('Unauthorized') || message.includes('Incorrect API key')) {
+      throw new Error(
+        'Autentikasi 9Router gagal. Periksa kembali NINEROUTER_API_KEY di file .env Anda.'
+      );
+    }
+    if (message.includes('404') || message.includes('model_not_found') || message.includes('does not exist')) {
+      throw new Error(
+        `Model "${this.model}" tidak ditemukan di 9Router. Periksa konfigurasi NINEROUTER_MODEL.`
+      );
+    }
+    if (message.includes('timeout') || message.includes('ETIMEDOUT')) {
+      throw new Error('Permintaan ke 9Router mengalami batas waktu (timeout).');
+    }
+
+    throw new Error(`9Router error: ${message}`);
   }
 }
-
