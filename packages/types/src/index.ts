@@ -86,11 +86,59 @@ export interface ToolParametersSchema {
   required?: string[];
 }
 
+// ============================================================================
+// Side-Effect Classification & Safe Execution
+// ============================================================================
+
+/**
+ * Declares how far a tool reaches outside the process.
+ *
+ * none:        read-only observation (screenshot, list_directory, inspect_ui)
+ * reversible:  locally reversible state (move_file, open_app, set_volume)
+ * external:    reaches another person or service (send_whatsapp_message, web_search)
+ * destructive: irreversible local damage (delete_file, run_command with rm -rf)
+ */
+export type SideEffectLevel = 'none' | 'reversible' | 'external' | 'destructive';
+
+export interface ToolSafetyMetadata {
+  sideEffect: SideEffectLevel;
+  supportsDryRun: boolean;
+  supportsSandbox: boolean;
+}
+
+/**
+ * dry_run: simulate the action, perform no external side effect
+ * sandbox: execute against an explicitly isolated resource
+ * live:     perform the real side effect
+ */
+export type ExecutionMode = 'dry_run' | 'sandbox' | 'live';
+
+export interface ExecutionPolicy {
+  mode: ExecutionMode;
+  safeTestMode: boolean;
+  liveSideEffects: boolean;
+  sandboxRoot: string;
+  /** Set when SAFE_TEST_MODE / LIVE_SIDE_EFFECTS were declared inconsistently. */
+  configError?: string;
+}
+
+/**
+ * Every simulated result carries this so a caller can never mistake a
+ * simulation for a real execution.
+ */
+export interface ExecutionStatus {
+  mode: ExecutionMode;
+  executed: boolean;
+  dryRun: boolean;
+}
+
 export interface ToolDefinition<TParams = Record<string, unknown>, TResult = unknown> {
   name: string;
   description: string;
   parameters: ToolParametersSchema;
   permissionLevel: PermissionLevel;
+  /** Declares the tool's side-effect class. Defaults to `external` when omitted. */
+  safety?: ToolSafetyMetadata;
   execute: (params: TParams, context: ToolExecutionContext) => Promise<ToolResult<TResult>>;
   validate?: (params: unknown) => { valid: boolean; error?: string };
 }
@@ -99,6 +147,8 @@ export interface ToolExecutionContext {
   requestId: string;
   requestConfirmation?: (req: Omit<ConfirmationRequest, 'id' | 'timestamp'>) => Promise<boolean>;
   logger: Logger;
+  /** Resolved policy for the current process. Tools must honour this themselves. */
+  policy: ExecutionPolicy;
 }
 
 export interface ToolCallRequest {
@@ -386,6 +436,36 @@ export interface WhatsAppIntentValidation {
   reason?: 'recipient_missing' | 'message_missing' | 'invalid_intent' | 'ok';
   recipient?: string;
   message?: string;
+}
+
+export interface WhatsAppContact {
+  name: string;
+  phone?: string;
+}
+
+export interface WhatsAppMessageResult {
+  recipient: string;
+  text: string;
+  sent: boolean;
+  verified: boolean;
+  details: string;
+  /** Present on every simulated result; absent on genuine live sends. */
+  mode?: ExecutionMode;
+  dryRun?: boolean;
+  executed?: boolean;
+}
+
+/**
+ * The single seam every WhatsApp action passes through. Live and simulated
+ * implementations share the same validation and result schema, so production
+ * behaviour cannot diverge from what tests exercise.
+ */
+export interface WhatsAppExecutor {
+  readonly mode: ExecutionMode;
+  openWhatsApp(): Promise<{ target: 'app' | 'web'; message: string }>;
+  searchContact(contactName: string): Promise<{ success: boolean; message: string }>;
+  openChat(contact: string, phone?: string): Promise<{ success: boolean; message: string }>;
+  sendMessage(contactName: string, text: string): Promise<WhatsAppMessageResult>;
 }
 
 export interface CommandParseResult {

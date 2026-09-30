@@ -223,30 +223,49 @@ export function fastRoute(transcript: string): FastRouteResult {
 }
 
 /**
+ * A captured "app name" is only trustworthy when it is actually a short noun
+ * phrase. Without this guard the open/close patterns swallow whole sentences —
+ * "jalankan command pwd di terminal dan tampilkan hasilnya" would otherwise be
+ * routed to open_app with an app name that is an entire clause.
+ */
+function looksLikeAppName(target: string): boolean {
+  const cleaned = target.trim();
+  if (cleaned.length < 2) return false;
+  if (cleaned.includes('http')) return false;
+  if (cleaned.startsWith('di ')) return false;
+
+  // Multi-action sentences must reach the multi-action splitter or the LLM.
+  if (/[,;]/.test(cleaned)) return false;
+  if (/\b(terus|trus|lalu|habis\s+itu|kemudian|sekalian|and\s+then|then|dan|comma)\b/i.test(cleaned)) {
+    return false;
+  }
+
+  // App names are short. Anything longer is a sentence the LLM should parse.
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  return words.length <= 4;
+}
+
+/**
  * Match a single command to a deterministic tool call
  */
 function matchSingleDeterministicCommand(input: string, indexOffset: number = 0): FastRouteResult | null {
   // ── A. Open App ──
   for (const pattern of OPEN_APP_PATTERNS) {
     const m = input.match(pattern);
-    if (m) {
-      const rawTarget = m[1].trim();
-      // Guard against non-app phrases like "di google" or sentences
-      if (rawTarget.length >= 2 && !rawTarget.includes('http') && !rawTarget.startsWith('di ')) {
-        const appName = normalizeAppName(rawTarget);
-        return {
-          matched: true,
-          toolCalls: [{ id: `fast_open_${Date.now()}_${indexOffset}`, name: 'open_app', parameters: { appName } }],
-          confirmText: `✓ Opening ${appName}`,
-        };
-      }
+    if (m && looksLikeAppName(m[1])) {
+      const appName = normalizeAppName(m[1].trim());
+      return {
+        matched: true,
+        toolCalls: [{ id: `fast_open_${Date.now()}_${indexOffset}`, name: 'open_app', parameters: { appName } }],
+        confirmText: `✓ Opening ${appName}`,
+      };
     }
   }
 
   // ── B. Close App ──
   for (const pattern of CLOSE_APP_PATTERNS) {
     const m = input.match(pattern);
-    if (m) {
+    if (m && looksLikeAppName(m[1])) {
       const appName = normalizeAppName(m[1].trim());
       return {
         matched: true,

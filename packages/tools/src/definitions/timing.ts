@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@kacung/types';
+import { toolSafety } from '../safety/policy.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -12,6 +13,7 @@ export const waitTool: ToolDefinition<WaitParams, { waitedMs: number; message: s
   name: 'wait',
   description: 'Pauses execution for a specified duration in milliseconds (e.g. 1000 for 1 second) to allow applications to launch or UI to update.',
   permissionLevel: 'SAFE',
+  safety: toolSafety('none', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -55,6 +57,7 @@ export const waitForAppTool: ToolDefinition<WaitForAppParams, { appName: string;
   name: 'wait_for_app',
   description: 'Waits until a target macOS application is running or until timeout.',
   permissionLevel: 'SAFE',
+  safety: toolSafety('none', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {

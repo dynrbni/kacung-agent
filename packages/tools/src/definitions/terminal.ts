@@ -1,6 +1,7 @@
 import { exec } from 'child_process';
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@kacung/types';
 import { evaluateCommandSafety } from '../security/command-safety.js';
+import { toolSafety } from '../safety/policy.js';
 
 export interface RunCommandParams {
   command: string;
@@ -20,6 +21,7 @@ export const runCommandTool: ToolDefinition<RunCommandParams, RunCommandResultDa
   name: 'run_command',
   description: 'Executes a validated shell command in the terminal. Safe read-only commands run directly, while sensitive or state-changing commands require confirmation. Destructive commands are strictly blocked.',
   permissionLevel: 'SENSITIVE',
+  safety: toolSafety('destructive', { supportsSandbox: false }),
   parameters: {
     type: 'object',
     properties: {

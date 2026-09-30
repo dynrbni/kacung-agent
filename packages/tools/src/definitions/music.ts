@@ -2,6 +2,7 @@ import { execFile, execFileSync } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@kacung/types';
+import { toolSafety } from '../safety/policy.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -67,6 +68,7 @@ export const playMusicTool: ToolDefinition<PlayMusicParams, PlayMusicResultData>
   description:
     'Searches and plays a song, artist, album, or playlist in Apple Music or Spotify on macOS.',
   permissionLevel: 'SAFE',
+  safety: toolSafety('reversible', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -282,6 +284,7 @@ export const playMusicTool: ToolDefinition<PlayMusicParams, PlayMusicResultData>
             const swiftDoubleClick = `
 import CoreGraphics
 import Foundation
+import { toolSafety } from '../safety/policy.js';
 
 let point = CGPoint(x: ${clickX}, y: ${clickY})
 let move = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)
@@ -409,4 +412,7 @@ export const searchMusicTool: ToolDefinition<PlayMusicParams, PlayMusicResultDat
   ...playMusicTool,
   name: 'search_music',
   description: 'Searches for songs, albums, or artists in Apple Music or Spotify on macOS.',
+  // Spreading playMusicTool would otherwise inherit its `reversible` class
+  // implicitly; restate it so the classification is deliberate.
+  safety: toolSafety('reversible'),
 };

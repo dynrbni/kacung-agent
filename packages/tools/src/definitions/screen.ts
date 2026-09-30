@@ -4,6 +4,7 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@kacung/types';
+import { toolSafety } from '../safety/policy.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -22,6 +23,7 @@ export const screenshotTool: ToolDefinition<ScreenshotParams, ScreenshotResultDa
   name: 'screenshot',
   description: 'Takes a screenshot of the main macOS display and saves it locally. Useful for inspecting current screen state or UI.',
   permissionLevel: 'SAFE',
+  safety: toolSafety('none', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -85,6 +87,7 @@ export const screenshotAppTool: ToolDefinition<ScreenshotAppParams, ScreenshotRe
   name: 'screenshot_app',
   description: 'Brings a specific application to front and captures a screenshot of its window or area.',
   permissionLevel: 'SAFE',
+  safety: toolSafety('none', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {

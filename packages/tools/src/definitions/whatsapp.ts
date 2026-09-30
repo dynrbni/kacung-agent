@@ -1,5 +1,6 @@
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@kacung/types';
-import { WhatsAppController, WhatsAppMessageResult } from '../whatsapp/controller.js';
+import type { ToolDefinition, ToolExecutionContext, ToolResult, WhatsAppMessageResult } from '@kacung/types';
+import { WhatsAppController } from '../whatsapp/controller.js';
+import { toolSafety } from '../safety/policy.js';
 
 // ----------------------------------------------------------------------------
 // Open WhatsApp Tool
@@ -8,12 +9,13 @@ export const openWhatsAppTool: ToolDefinition<Record<string, never>, { target: s
   name: 'open_whatsapp',
   description: 'Opens WhatsApp Desktop application or WhatsApp Web in the browser.',
   permissionLevel: 'SAFE',
+  safety: toolSafety('external', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {},
   },
   async execute(_params: Record<string, never>, context: ToolExecutionContext): Promise<ToolResult<{ target: string; message: string }>> {
-    const controller = new WhatsAppController(context.logger);
+    const controller = new WhatsAppController(context.logger, context.policy);
     const res = await controller.openWhatsApp();
     return {
       success: true,
@@ -33,6 +35,7 @@ export const searchWhatsAppContactTool: ToolDefinition<SearchWhatsAppContactPara
   name: 'search_whatsapp_contact',
   description: 'Searches for a person or chat in WhatsApp by contact name.',
   permissionLevel: 'SAFE',
+  safety: toolSafety('external', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -54,7 +57,7 @@ export const searchWhatsAppContactTool: ToolDefinition<SearchWhatsAppContactPara
     return { valid: true };
   },
   async execute(params: SearchWhatsAppContactParams, context: ToolExecutionContext): Promise<ToolResult<{ name: string; message: string }>> {
-    const controller = new WhatsAppController(context.logger);
+    const controller = new WhatsAppController(context.logger, context.policy);
     const res = await controller.searchContact(params.name.trim());
     return {
       success: res.success,
@@ -78,6 +81,7 @@ export const openWhatsAppChatTool: ToolDefinition<OpenWhatsAppChatParams, { cont
   name: 'open_whatsapp_chat',
   description: 'Opens a chat conversation with a specific contact or phone number in WhatsApp.',
   permissionLevel: 'SAFE',
+  safety: toolSafety('external', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -103,7 +107,7 @@ export const openWhatsAppChatTool: ToolDefinition<OpenWhatsAppChatParams, { cont
     return { valid: true };
   },
   async execute(params: OpenWhatsAppChatParams, context: ToolExecutionContext): Promise<ToolResult<{ contact: string; message: string }>> {
-    const controller = new WhatsAppController(context.logger);
+    const controller = new WhatsAppController(context.logger, context.policy);
     const res = await controller.openChat(params.contact.trim(), params.phone);
     return {
       success: res.success,
@@ -130,6 +134,7 @@ export const sendWhatsAppMessageTool: ToolDefinition<SendWhatsAppMessageParams, 
   name: 'send_whatsapp_message',
   description: 'Send a WhatsApp message to a specific recipient. Preserve the user\'s intended message content exactly.',
   permissionLevel: 'SENSITIVE',
+  safety: toolSafety('external', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -227,13 +232,15 @@ export const sendWhatsAppMessageTool: ToolDefinition<SendWhatsAppMessageParams, 
       }
     }
 
-    const controller = new WhatsAppController(context.logger);
+    const controller = new WhatsAppController(context.logger, context.policy);
     const result = await controller.sendMessage(recipient, message);
 
+    // A simulated send is a successful simulation, not a failed send. Callers
+    // must be able to tell the two apart via result.data.executed.
     return {
-      success: result.sent,
+      success: result.executed ? result.sent : true,
       data: result,
-      error: result.sent ? undefined : result.details,
+      error: result.executed && !result.sent ? result.details : undefined,
     };
   },
 };

@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@kacung/types';
+import { toolSafety } from '../safety/policy.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -12,6 +13,7 @@ export const openAppTool: ToolDefinition<OpenAppParams, { appName: string; app: 
   name: 'open_app',
   description: 'Opens a macOS application by its name (e.g., "Safari", "Spotify", "Terminal", "VS Code").',
   permissionLevel: 'SAFE',
+  safety: toolSafety('reversible', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -80,6 +82,7 @@ export const closeAppTool: ToolDefinition<CloseAppParams, { appName: string; mes
   name: 'close_app',
   description: 'Gracefully closes/quits a macOS application by its name.',
   permissionLevel: 'SAFE',
+  safety: toolSafety('reversible', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -133,6 +136,7 @@ export const focusAppTool: ToolDefinition<FocusAppParams, { appName: string; mes
   name: 'focus_app',
   description: 'Brings a running macOS application to the foreground and focuses its main window.',
   permissionLevel: 'SAFE',
+  safety: toolSafety('reversible', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -186,6 +190,7 @@ export const isAppRunningTool: ToolDefinition<IsAppRunningParams, { appName: str
   name: 'is_app_running',
   description: 'Checks whether a macOS application is currently running.',
   permissionLevel: 'SAFE',
+  safety: toolSafety('none', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {

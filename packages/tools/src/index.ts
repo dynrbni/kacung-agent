@@ -1,6 +1,8 @@
 export * from './registry.js';
 export * from './executor.js';
 export * from './security/command-safety.js';
+export * from './safety/policy.js';
+export * from './safety/dry-run.js';
 export * from './definitions/apps.js';
 export * from './definitions/screen.js';
 export * from './definitions/mouse.js';
@@ -16,4 +18,5 @@ export * from './definitions/whatsapp.js';
 export * from './definitions/volume.js';
 export * from './definitions/word.js';
 export * from './whatsapp/controller.js';
+export * from './whatsapp/executor.js';
 export * from './computer/engine.js';

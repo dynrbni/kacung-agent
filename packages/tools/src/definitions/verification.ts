@@ -2,6 +2,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
 import type { ToolDefinition, ToolExecutionContext, ToolResult, VerificationResult } from '@kacung/types';
+import { toolSafety } from '../safety/policy.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -14,6 +15,7 @@ export const verifyStateTool: ToolDefinition<VerifyStateParams, VerificationResu
   name: 'verify_state',
   description: 'Verifies whether a computer action or state transition succeeded (e.g. app is running, music is playing, file exists).',
   permissionLevel: 'SAFE',
+  safety: toolSafety('none', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {

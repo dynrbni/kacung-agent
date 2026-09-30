@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@kacung/types';
+import { toolSafety } from '../safety/policy.js';
 
 function runSwiftSnippet(code: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -39,6 +40,7 @@ export const clickTool: ToolDefinition<ClickParams, { x: number; y: number; mess
   name: 'click',
   description: 'Simulates a mouse click at specific (x, y) screen coordinates.',
   permissionLevel: 'SENSITIVE',
+  safety: toolSafety('external', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -103,6 +105,7 @@ export const doubleClickTool: ToolDefinition<ClickParams, { x: number; y: number
   name: 'double_click',
   description: 'Simulates a double-click at specific (x, y) screen coordinates.',
   permissionLevel: 'SENSITIVE',
+  safety: toolSafety('external', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -177,6 +180,7 @@ export const moveMouseTool: ToolDefinition<ClickParams, { x: number; y: number; 
   name: 'move_mouse',
   description: 'Moves the mouse cursor to specific (x, y) coordinates without clicking.',
   permissionLevel: 'SAFE',
+  safety: toolSafety('reversible', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -235,6 +239,7 @@ export const scrollTool: ToolDefinition<ScrollParams, { direction: string; amoun
   name: 'scroll',
   description: 'Scrolls the mouse wheel in a specified direction ("up", "down", "left", "right").',
   permissionLevel: 'SAFE',
+  safety: toolSafety('reversible', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -304,6 +309,7 @@ export const rightClickTool: ToolDefinition<RightClickParams, { x: number; y: nu
   name: 'right_click',
   description: 'Simulates a mouse right-click (secondary click) at specific (x, y) screen coordinates.',
   permissionLevel: 'SENSITIVE',
+  safety: toolSafety('external', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -375,6 +381,7 @@ export const dragTool: ToolDefinition<DragParams, { startX: number; startY: numb
   name: 'drag',
   description: 'Simulates clicking and dragging the mouse from a start point (startX, startY) to an end point (endX, endY).',
   permissionLevel: 'SENSITIVE',
+  safety: toolSafety('external', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -405,6 +412,7 @@ export const dragTool: ToolDefinition<DragParams, { startX: number; startY: numb
     const swiftCode = `
 import CoreGraphics
 import Foundation
+import { toolSafety } from '../safety/policy.js';
 
 let startPoint = CGPoint(x: ${startX}, y: ${startY})
 let endPoint = CGPoint(x: ${endX}, y: ${endY})

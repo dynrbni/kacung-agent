@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { ToolDefinition, ToolExecutionContext, ToolResult, UIElement } from '@kacung/types';
+import { toolSafety } from '../safety/policy.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -20,6 +21,7 @@ export const inspectUITool: ToolDefinition<InspectUIParams, InspectUIResultData>
   name: 'inspect_ui',
   description: 'Inspects visible UI elements and accessibility hierarchy (buttons, inputs, menus, text) of the frontmost or specified application.',
   permissionLevel: 'SAFE',
+  safety: toolSafety('none', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {

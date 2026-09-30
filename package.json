@@ -5,9 +5,12 @@
   "description": "Kacung — Native macOS AI Agent Voice Assistant",
   "scripts": {
     "build": "pnpm --recursive run build",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "SAFE_TEST_MODE=true LIVE_SIDE_EFFECTS=false vitest run",
+    "test:watch": "SAFE_TEST_MODE=true LIVE_SIDE_EFFECTS=false vitest",
+    "test:integration": "SAFE_TEST_MODE=true LIVE_SIDE_EFFECTS=false vitest run tests/",
+    "dev": "SAFE_TEST_MODE=true LIVE_SIDE_EFFECTS=false pnpm dev:agent",
     "dev:agent": "pnpm --filter @kacung/agent run dev",
+    "dev:live": "pnpm --filter @kacung/agent run dev",
     "build:macos": "swift build --package-path apps/macos",
     "clean": "pnpm --recursive run clean && rimraf dist"
   },

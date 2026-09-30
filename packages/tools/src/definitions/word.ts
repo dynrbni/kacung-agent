@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@kacung/types';
+import { toolSafety } from '../safety/policy.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -25,6 +26,7 @@ export const writeWordDocumentTool: ToolDefinition<WriteWordDocumentParams, Writ
   description:
     'Writes or types research findings, summaries, notes, or essays directly into Microsoft Word (or Pages/TextEdit as fallback). Creates a new document or appends to an active document.',
   permissionLevel: 'SAFE',
+  safety: toolSafety('reversible', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {

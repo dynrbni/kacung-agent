@@ -6,6 +6,7 @@ import { screenshotTool, screenshotAppTool } from '../definitions/screen.js';
 import { inspectUITool } from '../definitions/ui.js';
 import { waitTool, waitForAppTool } from '../definitions/timing.js';
 import { verifyStateTool } from '../definitions/verification.js';
+import { getExecutionPolicy } from '../safety/policy.js';
 
 export interface ComputerUseEngineOptions {
   logger?: Logger;
@@ -27,6 +28,7 @@ export class ComputerUseEngine {
         warn: () => {},
         error: () => {},
       },
+      policy: getExecutionPolicy(),
     };
   }
 

@@ -2,8 +2,16 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@kacung/types';
+import { toolSafety, resolveSandboxPath } from '../safety/policy.js';
 
-function resolvePath(filePath: string): string {
+/**
+ * Resolves a path argument. In sandbox mode every path is re-rooted inside the
+ * sandbox directory, so filesystem tools cannot reach the user's real files.
+ */
+function resolvePath(filePath: string, context?: ToolExecutionContext): string {
+  if (context?.policy.mode === 'sandbox') {
+    return resolveSandboxPath(context.policy.sandboxRoot, filePath);
+  }
   if (filePath.startsWith('~/') || filePath === '~') {
     return path.join(os.homedir(), filePath.slice(1));
   }
@@ -22,6 +30,7 @@ export const readFileTool: ToolDefinition<ReadFileParams, { path: string; conten
   name: 'read_file',
   description: 'Reads the contents of a local file as UTF-8 text.',
   permissionLevel: 'SAFE',
+  safety: toolSafety('none', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -47,7 +56,7 @@ export const readFileTool: ToolDefinition<ReadFileParams, { path: string; conten
     return { valid: true };
   },
   async execute(params: ReadFileParams, context: ToolExecutionContext): Promise<ToolResult<{ path: string; content: string; sizeBytes: number }>> {
-    const targetPath = resolvePath(params.path);
+    const targetPath = resolvePath(params.path, context);
     const maxBytes = params.maxBytes || 100_000;
     context.logger.info(`Reading file: ${targetPath}`);
 
@@ -102,6 +111,7 @@ export const writeFileTool: ToolDefinition<WriteFileParams, { path: string; byte
   name: 'write_file',
   description: 'Writes or updates text content to a local file. Creates parent directories if they do not exist.',
   permissionLevel: 'SENSITIVE',
+  safety: toolSafety('reversible', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -130,7 +140,7 @@ export const writeFileTool: ToolDefinition<WriteFileParams, { path: string; byte
     return { valid: true };
   },
   async execute(params: WriteFileParams, context: ToolExecutionContext): Promise<ToolResult<{ path: string; bytesWritten: number; message: string }>> {
-    const targetPath = resolvePath(params.path);
+    const targetPath = resolvePath(params.path, context);
     context.logger.info(`Writing file: ${targetPath}`);
 
     try {
@@ -169,6 +179,7 @@ export const listDirectoryTool: ToolDefinition<ListDirectoryParams, { path: stri
   name: 'list_directory',
   description: 'Lists files and folders inside a given directory.',
   permissionLevel: 'SAFE',
+  safety: toolSafety('none', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -179,7 +190,7 @@ export const listDirectoryTool: ToolDefinition<ListDirectoryParams, { path: stri
     },
   },
   async execute(params: ListDirectoryParams, context: ToolExecutionContext): Promise<ToolResult<{ path: string; files: Array<{ name: string; isDirectory: boolean; size: number }> }>> {
-    const targetDir = resolvePath(params?.path || '.');
+    const targetDir = resolvePath(params?.path || '.', context);
     context.logger.info(`Listing directory: ${targetDir}`);
 
     try {
@@ -227,6 +238,7 @@ export const findFileTool: ToolDefinition<FindFileParams, { matches: string[]; c
   name: 'find_file',
   description: 'Searches for files matching a keyword or substring within a directory.',
   permissionLevel: 'SAFE',
+  safety: toolSafety('none', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -256,7 +268,7 @@ export const findFileTool: ToolDefinition<FindFileParams, { matches: string[]; c
     return { valid: true };
   },
   async execute(params: FindFileParams, context: ToolExecutionContext): Promise<ToolResult<{ matches: string[]; count: number }>> {
-    const rootDir = resolvePath(params.directory || '.');
+    const rootDir = resolvePath(params.directory || '.', context);
     const query = params.query.toLowerCase().trim();
     const maxResults = params.maxResults || 20;
     const matches: string[] = [];
@@ -304,6 +316,7 @@ export const createDirectoryTool: ToolDefinition<CreateDirectoryParams, { path: 
   name: 'create_directory',
   description: 'Creates a new directory (and parent directories if needed).',
   permissionLevel: 'SENSITIVE',
+  safety: toolSafety('reversible', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -312,7 +325,7 @@ export const createDirectoryTool: ToolDefinition<CreateDirectoryParams, { path: 
     required: ['path'],
   },
   async execute(params: CreateDirectoryParams, context: ToolExecutionContext): Promise<ToolResult<{ path: string; message: string }>> {
-    const targetDir = resolvePath(params.path);
+    const targetDir = resolvePath(params.path, context);
     context.logger.info(`Creating directory: ${targetDir}`);
     try {
       fs.mkdirSync(targetDir, { recursive: true });
@@ -336,6 +349,7 @@ export const copyFileTool: ToolDefinition<CopyFileParams, { source: string; dest
   name: 'copy_file',
   description: 'Copies a file from source path to destination path.',
   permissionLevel: 'SENSITIVE',
+  safety: toolSafety('reversible', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -345,8 +359,8 @@ export const copyFileTool: ToolDefinition<CopyFileParams, { source: string; dest
     required: ['source', 'destination'],
   },
   async execute(params: CopyFileParams, context: ToolExecutionContext): Promise<ToolResult<{ source: string; destination: string; message: string }>> {
-    const src = resolvePath(params.source);
-    const dest = resolvePath(params.destination);
+    const src = resolvePath(params.source, context);
+    const dest = resolvePath(params.destination, context);
     context.logger.info(`Copying file from ${src} to ${dest}`);
     try {
       fs.copyFileSync(src, dest);
@@ -370,6 +384,7 @@ export const moveFileTool: ToolDefinition<MoveFileParams, { source: string; dest
   name: 'move_file',
   description: 'Moves or renames a file from source to destination.',
   permissionLevel: 'SENSITIVE',
+  safety: toolSafety('reversible', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -379,8 +394,8 @@ export const moveFileTool: ToolDefinition<MoveFileParams, { source: string; dest
     required: ['source', 'destination'],
   },
   async execute(params: MoveFileParams, context: ToolExecutionContext): Promise<ToolResult<{ source: string; destination: string; message: string }>> {
-    const src = resolvePath(params.source);
-    const dest = resolvePath(params.destination);
+    const src = resolvePath(params.source, context);
+    const dest = resolvePath(params.destination, context);
     context.logger.info(`Moving file from ${src} to ${dest}`);
     try {
       fs.renameSync(src, dest);
@@ -403,6 +418,7 @@ export const deleteFileTool: ToolDefinition<DeleteFileParams, { path: string; me
   name: 'delete_file',
   description: 'Deletes a file or directory. This is a DANGEROUS action requiring explicit user confirmation.',
   permissionLevel: 'DANGEROUS',
+  safety: toolSafety('destructive', { supportsSandbox: false }),
   parameters: {
     type: 'object',
     properties: {
@@ -411,7 +427,7 @@ export const deleteFileTool: ToolDefinition<DeleteFileParams, { path: string; me
     required: ['path'],
   },
   async execute(params: DeleteFileParams, context: ToolExecutionContext): Promise<ToolResult<{ path: string; message: string }>> {
-    const target = resolvePath(params.path);
+    const target = resolvePath(params.path, context);
     context.logger.warn(`delete_file requested for: ${target}`);
 
     if (context.requestConfirmation) {

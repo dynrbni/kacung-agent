@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@kacung/types';
+import { toolSafety } from '../safety/policy.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -22,6 +23,7 @@ export const setVolumeTool: ToolDefinition<VolumeParams, VolumeResultData> = {
   description:
     'Controls macOS system volume. Supports lowering volume (down), increasing volume (up), setting exact volume percentage (set), muting, unmuting, and reading current volume.',
   permissionLevel: 'SAFE',
+  safety: toolSafety('reversible', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {

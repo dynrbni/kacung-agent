@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@kacung/types';
+import { toolSafety } from '../safety/policy.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -15,6 +16,7 @@ export const openUrlTool: ToolDefinition<OpenUrlParams, { url: string; message: 
   name: 'open_url',
   description: 'Opens a web URL in the user\'s default web browser on macOS.',
   permissionLevel: 'SAFE',
+  safety: toolSafety('external', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -79,6 +81,7 @@ export const webSearchTool: ToolDefinition<WebSearchParams, { query: string; res
   name: 'web_search',
   description: 'Searches the web for information using DuckDuckGo and returns top results with titles, snippets, and URLs.',
   permissionLevel: 'SAFE',
+  safety: toolSafety('external', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -205,6 +208,7 @@ export const readWebPageTool: ToolDefinition<ReadWebPageParams, { url: string; t
   name: 'read_web_page',
   description: 'Fetches and extracts clean readable text content from a web page URL.',
   permissionLevel: 'SAFE',
+  safety: toolSafety('external', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {

@@ -4,9 +4,17 @@ import type {
   ToolResult,
   ExecutedToolCall,
   ConfirmationRequest,
+  ExecutionPolicy,
   Logger,
 } from '@kacung/types';
 import { ToolRegistry } from './registry.js';
+import {
+  getExecutionPolicy,
+  getToolSafety,
+  shouldSimulate,
+  isSandboxed,
+} from './safety/policy.js';
+import { buildDryRunResult, formatDryRunSummary } from './safety/dry-run.js';
 
 export interface ToolExecutorOptions {
   registry?: ToolRegistry;
@@ -14,6 +22,8 @@ export interface ToolExecutorOptions {
   requestConfirmation?: (req: Omit<ConfirmationRequest, 'id' | 'timestamp'>) => Promise<boolean>;
   confirmSensitive?: boolean;
   confirmDangerous?: boolean;
+  /** Overrides the process-wide policy. Tests use this to pin a mode. */
+  policy?: ExecutionPolicy;
 }
 
 const defaultLogger: Logger = {
@@ -29,6 +39,7 @@ export class ToolExecutor {
   private requestConfirmation?: (req: Omit<ConfirmationRequest, 'id' | 'timestamp'>) => Promise<boolean>;
   private confirmSensitive: boolean;
   private confirmDangerous: boolean;
+  private policy: ExecutionPolicy;
 
   constructor(options: ToolExecutorOptions = {}) {
     this.registry = options.registry || new ToolRegistry();
@@ -36,10 +47,19 @@ export class ToolExecutor {
     this.requestConfirmation = options.requestConfirmation;
     this.confirmSensitive = options.confirmSensitive ?? (options.requestConfirmation !== undefined);
     this.confirmDangerous = options.confirmDangerous ?? (options.requestConfirmation !== undefined);
+    this.policy = options.policy ?? getExecutionPolicy();
+
+    if (this.policy.configError) {
+      this.logger.warn(this.policy.configError);
+    }
   }
 
   public getRegistry(): ToolRegistry {
     return this.registry;
+  }
+
+  public getPolicy(): ExecutionPolicy {
+    return this.policy;
   }
 
   public async execute(
@@ -80,7 +100,31 @@ export class ToolExecutor {
       }
     }
 
-    // 3. Permission checks (outside of tool's internal checks)
+    // 3. Side-effect gate. This sits below the LLM: no prompt, tool description,
+    //    or model output can reach step 4 unless the policy allows the side effect.
+    if (shouldSimulate(this.policy, tool.safety)) {
+      this.logger.info(formatDryRunSummary(toolName, parameters), {
+        callId,
+        mode: 'dry_run',
+        executed: false,
+        sideEffect: getToolSafety(tool.safety).sideEffect,
+      });
+
+      return {
+        id: callId,
+        name: toolName,
+        parameters,
+        result: buildDryRunResult({
+          toolName,
+          parameters,
+          safety: tool.safety,
+          policy: this.policy,
+        }),
+        durationMs: Date.now() - startTime,
+      };
+    }
+
+    // 4. Permission checks (outside of tool's internal checks)
     const requiresConfirmation =
       (tool.permissionLevel === 'DANGEROUS' && this.confirmDangerous) ||
       (tool.permissionLevel === 'SENSITIVE' && this.confirmSensitive);
@@ -110,16 +154,22 @@ export class ToolExecutor {
       }
     }
 
-    // 4. Execution context
+    // 5. Execution context
+    const sandboxed = isSandboxed(this.policy, tool.safety);
+    if (sandboxed) {
+      this.logger.info(`[SANDBOX] ${toolName} confined to ${this.policy.sandboxRoot}`, { callId });
+    }
+
     const context: ToolExecutionContext = {
       requestId: callId,
       logger: this.logger,
       requestConfirmation: (this.confirmDangerous || this.confirmSensitive)
         ? this.requestConfirmation
         : undefined,
+      policy: this.policy,
     };
 
-    // 5. Safe execution
+    // 6. Safe execution
     try {
       const result: ToolResult = await tool.execute(parameters, context);
       const durationMs = Date.now() - startTime;
@@ -129,7 +179,16 @@ export class ToolExecutor {
         id: callId,
         name: toolName,
         parameters,
-        result,
+        result: {
+          ...result,
+          metadata: {
+            mode: sandboxed ? 'sandbox' : 'live',
+            executed: true,
+            dryRun: false,
+            sandboxed,
+            ...(result.metadata ?? {}),
+          },
+        },
         durationMs,
       };
     } catch (err: unknown) {

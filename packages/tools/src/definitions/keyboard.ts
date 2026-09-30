@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@kacung/types';
+import { toolSafety } from '../safety/policy.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -15,6 +16,7 @@ export const typeTextTool: ToolDefinition<TypeTextParams, { text: string; messag
   name: 'type_text',
   description: 'Types a string of text into the currently active macOS application or focused field.',
   permissionLevel: 'SENSITIVE',
+  safety: toolSafety('external', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -92,6 +94,7 @@ export const pressKeyTool: ToolDefinition<PressKeyParams, { key: string; message
   name: 'press_key',
   description: 'Simulates pressing a single keyboard key (e.g. "return", "escape", "space", "tab", "up", "down") with optional modifiers ("command", "control", "option", "shift").',
   permissionLevel: 'SENSITIVE',
+  safety: toolSafety('external', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
@@ -165,6 +168,7 @@ export const hotkeyTool: ToolDefinition<HotkeyParams, { keys: string[]; message:
   name: 'hotkey',
   description: 'Simulates a keyboard shortcut/hotkey combination (e.g. ["command", "space"], ["command", "f"], ["command", "v"]).',
   permissionLevel: 'SENSITIVE',
+  safety: toolSafety('external', { supportsSandbox: true }),
   parameters: {
     type: 'object',
     properties: {
