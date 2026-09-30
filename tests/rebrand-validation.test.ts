@@ -15,6 +15,8 @@ const EXCLUDED_DIRS = ['.git', 'node_modules', 'dist', '.build', '.pnpm-store'];
 const ALLOWED_HISTORICAL = [
   // The migration record itself documents the old identifiers on purpose.
   'scripts/migration/kacung-to-lafly.mjs',
+  // This file necessarily names the previous brand in order to detect it.
+  'tests/rebrand-validation.test.ts',
 ];
 
 function walk(dir: string, acc: string[] = []): string[] {
