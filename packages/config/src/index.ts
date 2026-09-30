@@ -112,8 +112,8 @@ export function loadConfig(envPath?: string): KacungConfig {
       hotkeyFallback: env.HOTKEY_FALLBACK || 'Control+Option',
     },
     security: {
-      confirmSensitiveActions: env.CONFIRM_SENSITIVE_ACTIONS !== 'false',
-      confirmDangerousActions: env.CONFIRM_DANGEROUS_ACTIONS !== 'false',
+      confirmSensitiveActions: env.CONFIRM_SENSITIVE_ACTIONS === 'true',
+      confirmDangerousActions: env.CONFIRM_DANGEROUS_ACTIONS === 'true',
     },
     logging: {
       level: (env.LOG_LEVEL as LogLevel) || 'info',

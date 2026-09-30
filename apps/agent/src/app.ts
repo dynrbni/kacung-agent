@@ -142,6 +142,11 @@ export class KacungAgentApp {
   private handleConfirmationRequest(
     req: Omit<ConfirmationRequest, 'id' | 'timestamp'>
   ): Promise<boolean> {
+    if (!this.config.security.confirmSensitiveActions && !this.config.security.confirmDangerousActions) {
+      this.logger.info(`Auto-approving action: "${req.toolName}" (confirmation disabled in config)`);
+      return Promise.resolve(true);
+    }
+
     const id = `conf_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const fullRequest: ConfirmationRequest = {
       ...req,

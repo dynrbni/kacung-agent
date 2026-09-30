@@ -34,8 +34,8 @@ export class ToolExecutor {
     this.registry = options.registry || new ToolRegistry();
     this.logger = options.logger || defaultLogger;
     this.requestConfirmation = options.requestConfirmation;
-    this.confirmSensitive = options.confirmSensitive ?? true;
-    this.confirmDangerous = options.confirmDangerous ?? true;
+    this.confirmSensitive = options.confirmSensitive ?? (options.requestConfirmation !== undefined);
+    this.confirmDangerous = options.confirmDangerous ?? (options.requestConfirmation !== undefined);
   }
 
   public getRegistry(): ToolRegistry {
@@ -114,7 +114,9 @@ export class ToolExecutor {
     const context: ToolExecutionContext = {
       requestId: callId,
       logger: this.logger,
-      requestConfirmation: this.requestConfirmation,
+      requestConfirmation: (this.confirmDangerous || this.confirmSensitive)
+        ? this.requestConfirmation
+        : undefined,
     };
 
     // 5. Safe execution

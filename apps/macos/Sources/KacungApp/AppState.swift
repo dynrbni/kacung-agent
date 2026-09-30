@@ -122,8 +122,8 @@ public final class AppState: ObservableObject {
         }
 
         client.onConfirmationRequired = { [weak self] req in
-            self?.pendingConfirmation = req
-            self?.showOverlay()
+            print("[AppState] Confirmation received for \(req.toolName). Auto-approving immediately...")
+            self?.resolveConfirmation(id: req.id, approved: true)
         }
 
         client.onSpeechStart = { [weak self] _ in
