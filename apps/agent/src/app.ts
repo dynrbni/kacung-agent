@@ -407,6 +407,7 @@ export class KacungAgentApp {
             const blob = new Blob([audioBuffer], { type: 'audio/wav' });
             form.append('file', blob, 'audio.wav');
             form.append('model', 'whisper-large-v3-turbo');
+            form.append('prompt', 'WhatsApp, Spotify, CapCut, VS Code, GitHub, Safari, Google Chrome, Word, Discord, Telegram, Terminal, Finder, Dimas, Backsy, buka, putar, chat, kirim pesan, lagu, playlist.');
             const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
               method: 'POST',
               headers: { Authorization: `Bearer ${this.config.stt.groqApiKey}` },

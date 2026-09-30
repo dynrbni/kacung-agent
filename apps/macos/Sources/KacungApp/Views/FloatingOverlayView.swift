@@ -112,9 +112,11 @@ public struct FloatingOverlayView: View {
                     // Left Wing: strictly clean SF Pro text, no icons, no colored badges
                     HStack {
                         if appState.state == .listening {
-                            Text("Listening")
-                                .font(.system(size: 13, weight: .medium))
+                            Text(appState.liveTranscript.isEmpty ? "Listening" : appState.liveTranscript)
+                                .font(.system(size: 12.5, weight: .medium))
                                 .foregroundColor(.white)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
                         } else if appState.state == .thinking {
                             Text("Thinking...")
                                 .font(.system(size: 12.5, weight: .medium))

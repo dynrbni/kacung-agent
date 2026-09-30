@@ -7,10 +7,11 @@ public final class HotkeyManager {
     private var globalMonitor: Any?
     private var localMonitor: Any?
     public var onHotkeyTriggered: (() -> Void)?
-    public var onHotkeyReleased: (() -> Void)?
+    public var onHotkeyReleased: ((TimeInterval) -> Void)?
 
     private var isControlOptionActive = false
     private var lastTriggerTime: TimeInterval = 0
+    private var pressStartTime: TimeInterval = 0
 
     private init() {}
 
@@ -60,15 +61,17 @@ public final class HotkeyManager {
             if active {
                 if !isControlOptionActive {
                     isControlOptionActive = true
+                    pressStartTime = Date().timeIntervalSince1970
                     triggerDebounced()
                     return true
                 }
             } else {
                 if isControlOptionActive {
                     isControlOptionActive = false
-                    print("[HotkeyManager] Control + Option released!")
+                    let duration = Date().timeIntervalSince1970 - pressStartTime
+                    print("[HotkeyManager] Control + Option released after \(String(format: "%.2f", duration))s")
                     DispatchQueue.main.async { [weak self] in
-                        self?.onHotkeyReleased?()
+                        self?.onHotkeyReleased?(duration)
                     }
                 }
             }

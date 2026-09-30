@@ -325,3 +325,24 @@ export interface VerificationResult {
   target?: string;
   details: string;
 }
+
+// ============================================================================
+// Transcript & Voice Pipeline Types
+// ============================================================================
+
+export interface TranscriptCorrection {
+  from: string;
+  to: string;
+  reason: string;
+}
+
+export interface ProcessedTranscript {
+  rawTranscript: string;
+  normalizedTranscript: string;
+  confidence: number;
+  detectedLanguage: 'id' | 'en' | 'mixed';
+  isValid: boolean;
+  validationReason?: string;
+  hasCorrections: boolean;
+  corrections: TranscriptCorrection[];
+}

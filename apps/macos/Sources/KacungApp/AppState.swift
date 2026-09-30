@@ -208,20 +208,33 @@ public final class AppState: ObservableObject {
         hotkey.onHotkeyTriggered = { [weak self] in
             self?.handleHotkeyWake()
         }
-        hotkey.onHotkeyReleased = { [weak self] in
-            self?.handleHotkeyRelease()
+        hotkey.onHotkeyReleased = { [weak self] duration in
+            self?.handleHotkeyRelease(duration: duration)
         }
         hotkey.registerHotkey()
     }
 
-    public func handleHotkeyRelease() {
+    public func handleHotkeyRelease(duration: TimeInterval) {
+        // Quick tap (< 0.45s) means user pressed Control+Option to summon hands-free listening.
+        // Keep listening until user finishes speaking and VAD silence detector triggers.
+        if duration < 0.45 {
+            return
+        }
+
+        // Long press (>= 0.45s) is Push-to-Talk mode.
         if state == .listening {
-            print("[AppState] Control + Option released while listening. Discarding prompt and hiding notch.")
-            speechRecognizer.cancelListening()
-            state = .idle
-            liveTranscript = ""
-            inputText = ""
-            hideOverlay()
+            let hasText = !speechRecognizer.liveTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            if speechRecognizer.hasSpoken && hasText {
+                print("[AppState] Push-to-talk released with spoken speech (\(speechRecognizer.liveTranscript)). Submitting query...")
+                stopListening()
+            } else {
+                print("[AppState] Push-to-talk released without speech. Discarding prompt and hiding notch.")
+                speechRecognizer.cancelListening()
+                state = .idle
+                liveTranscript = ""
+                inputText = ""
+                hideOverlay()
+            }
         }
     }
 

@@ -13,6 +13,7 @@ import type {
 import { ToolExecutor } from '@kacung/tools';
 import { buildSystemPrompt } from './prompt.js';
 import { StructuredLogger } from '../logger/index.js';
+import { processTranscript } from '../transcript/index.js';
 
 export interface AgentRuntimeOptions {
   llmProvider: LLMProvider;
@@ -188,10 +189,11 @@ export class AgentRuntime {
 
   /**
    * Primary entry point for speech transcripts from the voice/STT pipeline.
+   * Performs validation, quality control, contextual normalization, and structured diagnostics.
    */
   public async handleTranscript(transcript: string, options: AgentRunOptions = {}): Promise<AgentRunResult> {
-    const trimmed = (transcript || '').trim();
-    if (!trimmed) {
+    const rawTrimmed = (transcript || '').trim();
+    if (!rawTrimmed) {
       this.logger.warn('handleTranscript received empty transcript');
       return {
         text: 'Maaf, suara tidak terdeteksi. Bisa diulang kembali?',
@@ -201,7 +203,34 @@ export class AgentRuntime {
       };
     }
 
-    const lower = trimmed.toLowerCase();
+    const processed = processTranscript(transcript);
+
+    this.logger.info('Voice transcript processed', {
+      rawTranscript: processed.rawTranscript,
+      normalizedTranscript: processed.normalizedTranscript,
+      confidence: processed.confidence,
+      detectedLanguage: processed.detectedLanguage,
+      isValid: processed.isValid,
+      validationReason: processed.validationReason,
+      hasCorrections: processed.hasCorrections,
+      corrections: processed.corrections,
+    });
+
+    if (!processed.isValid) {
+      this.logger.warn('Voice transcript rejected by validator', {
+        reason: processed.validationReason,
+        rawTranscript: processed.rawTranscript,
+      });
+      return {
+        text: 'Maaf, suara tidak terdeteksi dengan jelas. Bisa tolong diulang?',
+        steps: [],
+        completed: false,
+        error: `Transcript invalid: ${processed.validationReason}`,
+      };
+    }
+
+    const command = processed.normalizedTranscript;
+    const lower = command.toLowerCase();
     if (['stop', 'berhenti', 'cancel', 'batal', 'diam'].includes(lower)) {
       this.cancelCurrentTask();
       return {
@@ -211,7 +240,10 @@ export class AgentRuntime {
       };
     }
 
-    return this.run(trimmed, options);
+    return this.run(command, {
+      ...options,
+      requestId: options.requestId || `voice_${Date.now()}`,
+    });
   }
 
   public async run(userInput: string, options: AgentRunOptions = {}): Promise<AgentRunResult> {
