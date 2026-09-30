@@ -36,8 +36,8 @@ public struct MenuBarView: View {
                     Image(systemName: "macwindow.on.rectangle")
                     Text("Toggle Assistant Overlay")
                     Spacer()
-                    Text("⌥ Space")
-                        .font(.caption)
+                    Text("⌃⌥")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
                         .foregroundColor(.secondary)
                 }
             }
@@ -82,6 +82,9 @@ public struct MenuBarView: View {
                         Spacer()
                         Button("Grant") {
                             PermissionManager.shared.openSystemSettings(for: "microphone")
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                                appState.checkPermissions()
+                            }
                         }
                         .font(.caption2)
                     }
@@ -97,23 +100,60 @@ public struct MenuBarView: View {
                         Spacer()
                         Button("Grant") {
                             PermissionManager.shared.openSystemSettings(for: "speech")
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                                appState.checkPermissions()
+                            }
                         }
                         .font(.caption2)
                     }
                 }
 
-                HStack {
-                    Image(systemName: appState.isAccessibilityGranted ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                        .foregroundColor(appState.isAccessibilityGranted ? .green : .orange)
-                    Text("Accessibility Control")
-                        .font(.caption)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack {
+                        Image(systemName: appState.isAccessibilityGranted ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                            .foregroundColor(appState.isAccessibilityGranted ? .green : .orange)
+                        Text("Accessibility Control")
+                            .font(.caption)
+
+                        Spacer()
+
+                        if !appState.isAccessibilityGranted {
+                            Button("Buka Settings") {
+                                PermissionManager.shared.requestAccessibilityPermission()
+                                PermissionManager.shared.openSystemSettings(for: "accessibility")
+                                for delay in [0.5, 1.0, 2.0, 4.0] {
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                                        appState.checkPermissions()
+                                    }
+                                }
+                            }
+                            .font(.caption2)
+                        } else {
+                            Text("Aktif")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
 
                     if !appState.isAccessibilityGranted {
-                        Spacer()
-                        Button("Grant") {
-                            PermissionManager.shared.openSystemSettings(for: "accessibility")
+                        Text("Jika sudah ON di System Settings, matikan lalu nyalakan lagi toggle Kacung agar macOS merefresh izin.")
+                            .font(.system(size: 9.5))
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, 1)
+
+                        Button(action: {
+                            appState.checkPermissions()
+                        }) {
+                            HStack(spacing: 3) {
+                                Image(systemName: "arrow.clockwise")
+                                Text("Cek Status Izin")
+                            }
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.accentColor)
                         }
-                        .font(.caption2)
+                        .buttonStyle(.plain)
+                        .padding(.top, 2)
                     }
                 }
             }
@@ -127,6 +167,12 @@ public struct MenuBarView: View {
             .foregroundColor(.red)
         }
         .padding(12)
-        .frame(width: 250)
+        .frame(width: 270)
+        .onAppear {
+            appState.checkPermissions()
+        }
+        .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
+            appState.checkPermissions()
+        }
     }
 }

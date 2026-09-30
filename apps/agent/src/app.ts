@@ -12,6 +12,7 @@ import { ToolExecutor } from '@kacung/tools';
 import {
   AgentRuntime,
   StructuredLogger,
+  NineRouterProvider,
   GeminiLLMProvider,
   OpenAILLMProvider,
   MockLLMProvider,
@@ -60,7 +61,7 @@ export class KacungAgentApp {
       requestConfirmation: (req) => this.handleConfirmationRequest(req),
     });
 
-    // 4. Configure Agent Runtime
+    // 4. Configure Agent Runtime (full computer-use capabilities)
     this.runtime = new AgentRuntime({
       llmProvider,
       toolExecutor: this.executor,
@@ -78,7 +79,30 @@ export class KacungAgentApp {
   }
 
   private resolveLLMProvider(): LLMProvider {
-    const { provider, model, geminiApiKey, openAiApiKey, ollamaBaseUrl } = this.config.llm;
+    const {
+      provider,
+      model,
+      nineRouterBaseUrl,
+      nineRouterApiKey,
+      nineRouterModel,
+      geminiApiKey,
+      openAiApiKey,
+      ollamaBaseUrl,
+    } = this.config.llm;
+
+    if (
+      provider === 'ninerouter' ||
+      (nineRouterBaseUrl && provider !== 'gemini' && provider !== 'openai' && provider !== 'ollama')
+    ) {
+      const activeModel = nineRouterModel || model || 'ag/gemini-3.8-flash-high';
+      this.logger.info(`Using 9Router LLM Provider at ${nineRouterBaseUrl} (model: ${activeModel})`);
+      return new NineRouterProvider({
+        baseUrl: nineRouterBaseUrl,
+        apiKey: nineRouterApiKey,
+        model: activeModel,
+        logger: this.logger,
+      });
+    }
 
     if (provider === 'gemini' && geminiApiKey) {
       this.logger.info(`Using Gemini LLM Provider (model: ${model})`);
@@ -103,7 +127,10 @@ export class KacungAgentApp {
   }
 
   private resolveTTSProvider(): TextToSpeechProvider {
-    if (this.config.tts.provider === 'macos') {
+    // When running with the native macOS app, speech synthesis is handled natively
+    // by AVSpeechSynthesizer upon receiving WebSocket 'speech_start' events.
+    // Having Node simultaneously execute `say` causes audio doubling/echo.
+    if (this.config.tts.provider === 'macos' && process.env.ENABLE_NODE_SAY === 'true') {
       return new MacOSSayTTSProvider({
         defaultVoice: this.config.tts.voice,
         defaultSpeed: this.config.tts.speed,
@@ -115,6 +142,11 @@ export class KacungAgentApp {
   private handleConfirmationRequest(
     req: Omit<ConfirmationRequest, 'id' | 'timestamp'>
   ): Promise<boolean> {
+    if (!this.config.security.confirmSensitiveActions && !this.config.security.confirmDangerousActions) {
+      this.logger.info(`Auto-approving action: "${req.toolName}" (confirmation disabled in config)`);
+      return Promise.resolve(true);
+    }
+
     const id = `conf_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const fullRequest: ConfirmationRequest = {
       ...req,
@@ -226,6 +258,9 @@ export class KacungAgentApp {
       ws.send(JSON.stringify({ type: 'confirm_ack', payload: { id: msg.id, resolved }, timestamp: Date.now() }));
     } else if (msg.type === 'wake') {
       this.runtime.setState('listening');
+    } else if (msg.type === 'cancel') {
+      const cancelled = this.runtime.cancelCurrentTask();
+      ws.send(JSON.stringify({ type: 'cancel_ack', payload: { cancelled }, timestamp: Date.now() }));
     } else if (msg.type === 'reset') {
       this.runtime.resetConversation();
       this.runtime.setState('idle');
@@ -315,7 +350,7 @@ export class KacungAgentApp {
           return;
         }
 
-        const result = await this.runtime.run(text);
+        const result = await this.runtime.handleTranscript(text);
         sendJson(200, result);
       } catch (err) {
         sendJson(500, { error: String(err) });
@@ -372,6 +407,7 @@ export class KacungAgentApp {
             const blob = new Blob([audioBuffer], { type: 'audio/wav' });
             form.append('file', blob, 'audio.wav');
             form.append('model', 'whisper-large-v3-turbo');
+            form.append('prompt', 'WhatsApp, Spotify, CapCut, VS Code, GitHub, Safari, Google Chrome, Word, Discord, Telegram, Terminal, Finder, Dimas, Backsy, buka, putar, chat, kirim pesan, lagu, playlist.');
             const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
               method: 'POST',
               headers: { Authorization: `Bearer ${this.config.stt.groqApiKey}` },
@@ -395,7 +431,7 @@ export class KacungAgentApp {
         }
 
         this.logger.info(`Audio transcribed to: "${transcript}"`);
-        const agentResult = await this.runtime.run(transcript);
+        const agentResult = await this.runtime.handleTranscript(transcript);
         sendJson(200, agentResult);
       } catch (err) {
         sendJson(500, { error: String(err) });

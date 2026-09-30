@@ -1,6 +1,37 @@
 import AppKit
 import SwiftUI
 
+final class NotchHostingView<Content: View>: NSHostingView<Content> {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard AppState.shared.isVisibleOnScreen else { return nil }
+        
+        // Cocoa view coordinates: y=0 is bottom, y=bounds.height is top.
+        // Active island content is anchored at the top of the hosting view.
+        let activeHeight: CGFloat = AppState.shared.isOutputExpanded ? 240.0 : (AppState.shared.notchTopInset > 0 ? AppState.shared.notchTopInset + 4.0 : 36.0)
+        let islandBottomY = bounds.height - activeHeight
+        
+        // If mouse is below the active island area, pass through to windows underneath
+        if point.y < islandBottomY {
+            return nil
+        }
+
+        // Pass through mouse clicks to left/right of the compact notch island
+        let activeWidth: CGFloat = 350.0
+        let islandLeftX = (bounds.width - activeWidth) / 2.0
+        let islandRightX = islandLeftX + activeWidth
+        if point.x < islandLeftX || point.x > islandRightX {
+            return nil
+        }
+
+        return super.hitTest(point)
+    }
+}
+
+final class NotchPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
@@ -11,17 +42,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Setup menu bar icon
         setupStatusItem()
 
-        // Setup floating Siri-style overlay window
+        // Setup floating Dynamic Island Notch overlay window
         setupFloatingOverlay()
 
         // Register AppState window reference
         AppState.shared.overlayWindow = overlayPanel
 
-        // Show overlay and start listening on initial launch
-        AppState.shared.showOverlay()
-        AppState.shared.startListening()
+        // Start quietly in background; overlay only appears on Control + Option hotkey trigger
+        AppState.shared.hideOverlay()
 
-        print("Kacung macOS application initialized successfully and is listening.")
+        NSLog("[Kacung] applicationDidFinishLaunching - AXIsProcessTrusted: %d", AXIsProcessTrusted() ? 1 : 0)
+        print("Kacung macOS application initialized successfully in background. Press Control+Option to summon.")
     }
 
     private func setupStatusItem() {
@@ -45,36 +76,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if popover.isShown {
             popover.performClose(nil)
         } else {
+            AppState.shared.checkPermissions()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         }
     }
 
     private func setupFloatingOverlay() {
-        let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
+        let defaultWidth: CGFloat = 560
+        let defaultHeight: CGFloat = 320
+
+        let panel = NotchPanel(
+            contentRect: NSRect(x: 0, y: 0, width: defaultWidth, height: defaultHeight),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
 
         panel.isFloatingPanel = true
-        panel.level = .floating
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        // Level above status window overlays seamlessly on top of notch & menu bar
+        panel.level = NSWindow.Level(Int(CGWindowLevelForKey(.statusWindow)) + 1)
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = false
-        panel.isMovableByWindowBackground = true
+        panel.isMovableByWindowBackground = false
 
         let contentView = FloatingOverlayView(appState: AppState.shared)
-        panel.contentView = NSHostingView(rootView: contentView)
+        panel.contentView = NotchHostingView(rootView: contentView)
 
-        // Center on screen
-        if let screen = NSScreen.main {
-            let screenRect = screen.visibleFrame
-            let x = screenRect.midX - 200
-            let y = screenRect.midY - 50 // Slightly higher than exact center
-            panel.setFrameOrigin(NSPoint(x: x, y: y))
-        }
+        // Position exactly at top center of notch screen
+        let notchScreen = getNotchScreen()
+        let screenFrame = notchScreen.frame
+        let x = screenFrame.midX - (defaultWidth / 2.0)
+        let y = screenFrame.maxY - defaultHeight
+        panel.setFrame(NSRect(x: x, y: y, width: defaultWidth, height: defaultHeight), display: true)
 
         self.overlayPanel = panel
     }
@@ -82,6 +117,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 // Top-level entry point (runs on Main thread)
 MainActor.assumeIsolated {
+    if CommandLine.arguments.contains("--check-ax") {
+        let trusted = AXIsProcessTrusted()
+        print("AX_RESULT:\(trusted)")
+        exit(trusted ? 0 : 1)
+    }
+
     let app = NSApplication.shared
     let delegate = AppDelegate()
     app.delegate = delegate

@@ -13,6 +13,9 @@ import type {
 import { ToolExecutor } from '@kacung/tools';
 import { buildSystemPrompt } from './prompt.js';
 import { StructuredLogger } from '../logger/index.js';
+import { processTranscript } from '../transcript/index.js';
+import { parseCommand, validateWhatsAppIntent, formatCommandTrace } from '../parser/index.js';
+import type { CommandTrace } from '@kacung/types';
 
 export interface AgentRuntimeOptions {
   llmProvider: LLMProvider;
@@ -20,6 +23,10 @@ export interface AgentRuntimeOptions {
   ttsProvider?: TextToSpeechProvider;
   logger?: Logger;
   assistantName?: string;
+  debug?: boolean;
+  allowedToolNames?: string[];
+  maxHistoryMessages?: number;
+  maxHistoryChars?: number;
 }
 
 export type AssistantEventListener = (event: AssistantEvent) => void;
@@ -31,8 +38,13 @@ export class AgentRuntime {
   private ttsProvider?: TextToSpeechProvider;
   private logger: Logger;
   private assistantName: string;
+  private debug: boolean;
+  private allowedToolNames?: string[];
+  private maxHistoryMessages: number;
+  private maxHistoryChars: number;
   private eventListeners: Set<AssistantEventListener> = new Set();
   private messages: ChatMessage[] = [];
+  private currentAbortController?: AbortController;
 
   constructor(options: AgentRuntimeOptions) {
     this.llmProvider = options.llmProvider;
@@ -40,8 +52,23 @@ export class AgentRuntime {
     this.ttsProvider = options.ttsProvider;
     this.logger = options.logger || new StructuredLogger('info');
     this.assistantName = options.assistantName || 'Kacung';
+    this.debug = options.debug ?? (process.env.DEBUG === 'true' || process.env.NODE_ENV !== 'production');
+    this.allowedToolNames = options.allowedToolNames;
+    this.maxHistoryMessages = options.maxHistoryMessages ?? 8;
+    this.maxHistoryChars = options.maxHistoryChars ?? 25000;
 
     this.resetConversation();
+  }
+
+  public cancelCurrentTask(): boolean {
+    if (this.currentAbortController) {
+      this.logger.info('Aborting currently running agent task');
+      this.currentAbortController.abort();
+      this.currentAbortController = undefined;
+      this.setState('idle', { cancelled: true });
+      return true;
+    }
+    return false;
   }
 
   public getState(): AssistantState {
@@ -52,6 +79,10 @@ export class AgentRuntime {
     return [...this.messages];
   }
 
+  public getModelName(): string {
+    return (this.llmProvider as unknown as { model?: string }).model || 'ag/gemini-3.8-flash-high';
+  }
+
   public resetConversation(): void {
     this.messages = [
       {
@@ -59,6 +90,69 @@ export class AgentRuntime {
         content: buildSystemPrompt(this.assistantName),
       },
     ];
+  }
+
+  /**
+   * Enforces a sliding context window to prevent token explosion.
+   */
+  private pruneConversationHistory(
+    maxMessages: number = this.maxHistoryMessages,
+    maxTotalChars: number = this.maxHistoryChars
+  ): void {
+    if (this.messages.length <= 1) return;
+
+    const systemMessage = this.messages[0];
+    let recent = this.messages.slice(1);
+
+    // 1. Cap message count to maxMessages
+    if (recent.length > maxMessages) {
+      recent = recent.slice(-maxMessages);
+      // Clean up orphaned tool messages that don't follow an assistant message with tool_calls
+      while (recent.length > 0 && recent[0].role === 'tool') {
+        recent.shift();
+      }
+    }
+
+    // 2. Bound total character length to prevent context explosion
+    let totalChars = recent.reduce((sum, m) => sum + (m.content?.length || 0), 0);
+    while (recent.length > 2 && totalChars > maxTotalChars) {
+      const removed = recent.shift();
+      if (removed) {
+        totalChars -= (removed.content?.length || 0);
+      }
+      while (recent.length > 0 && recent[0].role === 'tool') {
+        const orphan = recent.shift();
+        if (orphan) {
+          totalChars -= (orphan.content?.length || 0);
+        }
+      }
+    }
+
+    this.messages = [systemMessage, ...recent];
+  }
+
+  /**
+   * Sanitizes tool results before appending to prompt history,
+   * stripping raw base64 data and truncating oversized outputs.
+   */
+  private sanitizeToolResultForHistory(result: ExecutedToolCall['result']): string {
+    try {
+      const clone = JSON.parse(JSON.stringify(result));
+      if (clone && clone.data && typeof clone.data === 'object') {
+        if (typeof clone.data.base64 === 'string') {
+          clone.data.base64 = `[base64 image payload: ${clone.data.base64.length} chars]`;
+        }
+        for (const [key, value] of Object.entries(clone.data)) {
+          if (typeof value === 'string' && value.length > 1000) {
+            clone.data[key] = value.slice(0, 1000) + '... [truncated]';
+          }
+        }
+      }
+      const serialized = JSON.stringify(clone);
+      return serialized.length > 2000 ? serialized.slice(0, 2000) + '... [truncated]' : serialized;
+    } catch {
+      return JSON.stringify({ success: result.success, message: 'Execution complete' });
+    }
   }
 
   public onEvent(listener: AssistantEventListener): () => void {
@@ -95,13 +189,124 @@ export class AgentRuntime {
     });
   }
 
+  /**
+   * Primary entry point for speech transcripts from the voice/STT pipeline.
+   * Performs validation, quality control, contextual normalization, and structured diagnostics.
+   */
+  public async handleTranscript(transcript: string, options: AgentRunOptions = {}): Promise<AgentRunResult> {
+    const rawTrimmed = (transcript || '').trim();
+    if (!rawTrimmed) {
+      this.logger.warn('handleTranscript received empty transcript');
+      return {
+        text: 'Maaf, suara tidak terdeteksi. Bisa diulang kembali?',
+        steps: [],
+        completed: false,
+        error: 'empty transcript',
+      };
+    }
+
+    const processed = processTranscript(transcript);
+
+    this.logger.info('Voice transcript processed', {
+      rawTranscript: processed.rawTranscript,
+      normalizedTranscript: processed.normalizedTranscript,
+      confidence: processed.confidence,
+      detectedLanguage: processed.detectedLanguage,
+      isValid: processed.isValid,
+      validationReason: processed.validationReason,
+      hasCorrections: processed.hasCorrections,
+      corrections: processed.corrections,
+    });
+
+    if (!processed.isValid) {
+      this.logger.warn('Voice transcript rejected by validator', {
+        reason: processed.validationReason,
+        rawTranscript: processed.rawTranscript,
+      });
+      return {
+        text: 'Maaf, suara tidak terdeteksi dengan jelas. Bisa tolong diulang?',
+        steps: [],
+        completed: false,
+        error: `Transcript invalid: ${processed.validationReason}`,
+      };
+    }
+
+    const command = processed.normalizedTranscript;
+    const lower = command.toLowerCase();
+    if (['stop', 'berhenti', 'cancel', 'batal', 'diam'].includes(lower)) {
+      this.cancelCurrentTask();
+      return {
+        text: 'Siap bos, perintah dibatalkan.',
+        steps: [],
+        completed: true,
+      };
+    }
+
+    return this.run(command, {
+      ...options,
+      requestId: options.requestId || `voice_${Date.now()}`,
+    });
+  }
+
   public async run(userInput: string, options: AgentRunOptions = {}): Promise<AgentRunResult> {
+    const requestId = options.requestId || `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const startTime = Date.now();
+    const query = (userInput || '').trim();
+    const model = this.getModelName();
     const maxSteps = options.maxSteps || 8;
     const steps: AgentStep[] = [];
-    const query = userInput.trim();
 
-    this.logger.info(`Agent query received: "${query}"`);
-    this.setState('thinking');
+    if (!query) {
+      return {
+        text: 'Maaf, input kosong.',
+        steps: [],
+        completed: false,
+        error: 'empty transcript',
+      };
+    }
+
+    const abortController = new AbortController();
+    this.currentAbortController = abortController;
+
+    this.logger.info(`Agent query received`, {
+      timestamp: startTime,
+      requestId,
+      transcript: query,
+      model,
+    });
+    this.setState('thinking', { requestId, query });
+
+    const parsedCommand = parseCommand(query);
+
+    // 1. Validation check for structured messaging intents (e.g. "WhatsApp Reja Agung terus bilang")
+    if (parsedCommand.isStructured && parsedCommand.primaryIntent) {
+      if (parsedCommand.primaryIntent.intent === 'send_whatsapp_message') {
+        const validation = validateWhatsAppIntent(parsedCommand.primaryIntent);
+        if (!validation.valid && validation.reason === 'message_missing') {
+          const trace: CommandTrace = {
+            rawTranscript: query,
+            parsedIntent: parsedCommand.actions,
+            validation: {
+              recipient: validation.recipient ? 'valid' : 'missing',
+              message: 'missing',
+              reason: validation.reason,
+            },
+          };
+          this.logger.warn('WhatsApp structured validation failed: message missing (DO NOT SEND)', { trace });
+          if (this.debug) {
+            console.log('\n' + formatCommandTrace(trace) + '\n');
+          }
+          this.setState('idle');
+          return {
+            text: validation.recipient
+              ? `Mau kirim pesan apa ke ${validation.recipient}?`
+              : 'Penerima pesan belum disebutkan. Mau kirim pesan apa?',
+            steps: [],
+            completed: true,
+          };
+        }
+      }
+    }
 
     this.messages.push({
       role: 'user',
@@ -113,23 +318,94 @@ export class AgentRuntime {
       let finalResponse = '';
 
       while (stepIndex < maxSteps) {
+        if (abortController.signal.aborted) {
+          this.setState('idle', { cancelled: true });
+          return {
+            text: 'Perintah dibatalkan oleh pengguna.',
+            steps,
+            completed: false,
+            error: 'cancelled',
+          };
+        }
+
         stepIndex++;
         const currentStep: AgentStep = { stepIndex };
+        const stepStartTime = Date.now();
 
-        this.logger.debug(`Step ${stepIndex}/${maxSteps} starting`);
-        const tools = this.toolExecutor.getRegistry().list();
+        this.logger.debug(`Step ${stepIndex}/${maxSteps} starting`, { requestId, stepIndex });
+        
+        // Filter tools if restricted to milestone 1
+        const allTools = this.toolExecutor.getRegistry().list();
+        const tools = this.allowedToolNames
+          ? allTools.filter((t) => this.allowedToolNames!.includes(t.name))
+          : allTools;
 
-        // 1. LLM completion
-        const completion = await this.llmProvider.complete({
-          messages: this.messages,
-          tools,
-          temperature: options.temperature,
+        // Prune history to enforce sliding context window before dispatching
+        this.pruneConversationHistory();
+
+        // 1. LLM completion lifecycle with auto-recovery on token overflow
+        const llmStartTime = Date.now();
+        this.logger.info('LLM request dispatched', {
+          timestamp: llmStartTime,
+          requestId,
+          stepIndex,
+          model,
         });
 
-        // Check if LLM requested tool calls
+        let completion;
+        try {
+          completion = await this.llmProvider.complete({
+            messages: this.messages,
+            tools,
+            temperature: options.temperature,
+          });
+        } catch (llmErr) {
+          const errMsg = llmErr instanceof Error ? llmErr.message : String(llmErr);
+          if (
+            errMsg.includes('exceeds the maximum number of tokens') ||
+            errMsg.includes('token count exceeds') ||
+            errMsg.includes('context_length_exceeded') ||
+            errMsg.includes('maximum context length')
+          ) {
+            this.logger.warn('Token limit exceeded; resetting conversation history and retrying with current prompt', {
+              requestId,
+              error: errMsg,
+            });
+            // Hard reset conversation to just system prompt + user query
+            this.messages = [
+              {
+                role: 'system',
+                content: buildSystemPrompt(this.assistantName),
+              },
+              {
+                role: 'user',
+                content: query,
+              },
+            ];
+            completion = await this.llmProvider.complete({
+              messages: this.messages,
+              tools,
+              temperature: options.temperature,
+            });
+          } else {
+            throw llmErr;
+          }
+        }
+
+        const llmDurationMs = Date.now() - llmStartTime;
+        this.logger.info('LLM response received', {
+          timestamp: Date.now(),
+          requestId,
+          stepIndex,
+          model,
+          durationMs: llmDurationMs,
+          toolCallsCount: completion.toolCalls?.length || 0,
+        });
+
+        // 2. Check if LLM requested tool calls
         if (completion.toolCalls && completion.toolCalls.length > 0) {
           currentStep.toolCalls = completion.toolCalls;
-          this.setState('executing');
+          this.setState('executing', { requestId, toolCalls: completion.toolCalls.map((tc) => tc.name) });
 
           // Record assistant message with tool calls in history
           this.messages.push({
@@ -147,10 +423,84 @@ export class AgentRuntime {
 
           const executedCalls: ExecutedToolCall[] = [];
 
-          // 2. Execute tools sequentially
+          // 3. Execute tools sequentially
           for (const tc of completion.toolCalls) {
+            // Guard: Enforce authoritative verbatim message and recipient preservation
+            if (
+              tc.name === 'send_whatsapp_message' &&
+              parsedCommand.isStructured &&
+              parsedCommand.primaryIntent &&
+              parsedCommand.primaryIntent.intent === 'send_whatsapp_message'
+            ) {
+              const authoritative = parsedCommand.primaryIntent;
+              if (authoritative.recipient) {
+                if (tc.parameters.contact !== undefined) {
+                  tc.parameters.contact = authoritative.recipient;
+                } else {
+                  tc.parameters.recipient = authoritative.recipient;
+                }
+              }
+              if (authoritative.message) {
+                tc.parameters.message = authoritative.message;
+              }
+
+              const trace: CommandTrace = {
+                rawTranscript: query,
+                parsedIntent: parsedCommand.primaryIntent,
+                validation: {
+                  recipient: 'valid',
+                  message: 'valid',
+                },
+                contactResolution: {
+                  query: authoritative.recipient,
+                  resolved: true,
+                  contactName: authoritative.recipient,
+                },
+                execution: {
+                  tool: 'send_whatsapp_message',
+                  parameters: tc.parameters,
+                },
+              };
+              this.logger.info('Executing authoritative structured WhatsApp message', { trace });
+              if (this.debug) {
+                console.log('\n' + formatCommandTrace(trace) + '\n');
+              }
+            }
+
+            const toolStartTime = Date.now();
+
+            if (this.debug) {
+              console.log('\n========================================');
+              console.log('USER:');
+              console.log(query);
+              console.log('\nMODEL:');
+              console.log(model);
+              console.log('\nTOOL:');
+              console.log(tc.name);
+              console.log('\nARGUMENTS:');
+              console.log(JSON.stringify(tc.parameters, null, 2));
+            }
+
             this.emitEvent('tool_start', { toolName: tc.name, parameters: tc.parameters });
             const executed = await this.toolExecutor.execute(tc.name, tc.parameters, tc.id);
+            const toolDurationMs = Date.now() - toolStartTime;
+
+            if (this.debug) {
+              console.log('\nRESULT:');
+              console.log(executed.result.success ? 'success' : `failure (${executed.result.error || 'unknown error'})`);
+              console.log('========================================\n');
+            }
+
+            this.logger.info('Tool execution completed', {
+              timestamp: Date.now(),
+              requestId,
+              tool: tc.name,
+              arguments: tc.parameters,
+              result: executed.result.success ? 'success' : 'failure',
+              durationMs: toolDurationMs,
+              error: executed.result.error,
+            });
+
             executedCalls.push(executed);
             this.emitEvent('tool_end', {
               toolName: tc.name,
@@ -159,12 +509,12 @@ export class AgentRuntime {
               error: executed.result.error,
             });
 
-            // Append tool observation to conversation history
+            // Append sanitized tool observation to conversation history
             this.messages.push({
               role: 'tool',
               name: tc.name,
               tool_call_id: tc.id,
-              content: JSON.stringify(executed.result),
+              content: this.sanitizeToolResultForHistory(executed.result),
             });
           }
 
@@ -172,14 +522,27 @@ export class AgentRuntime {
           steps.push(currentStep);
 
           // Return to thinking state for next step
-          this.setState('thinking');
+          this.setState('thinking', { requestId, stepIndex });
           continue;
         }
 
-        // Final answer from LLM reached
+        // Final conversational answer from LLM reached
         finalResponse = completion.content || 'Siap bos, sudah selesai.';
         currentStep.response = finalResponse;
         steps.push(currentStep);
+
+        if (this.debug && stepIndex === 1) {
+          console.log('\n========================================');
+          console.log('USER:');
+          console.log(query);
+          console.log('\nMODEL:');
+          console.log(model);
+          console.log('\nTOOL:');
+          console.log('none (conversational response)');
+          console.log('\nRESULT:');
+          console.log(finalResponse);
+          console.log('========================================\n');
+        }
 
         this.messages.push({
           role: 'assistant',
@@ -188,6 +551,15 @@ export class AgentRuntime {
 
         break;
       }
+
+      const totalDurationMs = Date.now() - startTime;
+      this.logger.info('Agent run completed', {
+        timestamp: Date.now(),
+        requestId,
+        model,
+        totalSteps: steps.length,
+        executionDurationMs: totalDurationMs,
+      });
 
       // Voice output (TTS)
       if (finalResponse && this.ttsProvider) {
@@ -213,9 +585,43 @@ export class AgentRuntime {
       };
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`Agent execution failed: ${errorMsg}`);
-      this.setState('error', { error: errorMsg });
-      this.emitEvent('error', { error: errorMsg });
+      const totalDurationMs = Date.now() - startTime;
+
+      this.logger.error('Agent execution failed', {
+        timestamp: Date.now(),
+        requestId,
+        transcript: query,
+        model,
+        durationMs: totalDurationMs,
+        error: errorMsg,
+      });
+
+      this.setState('error', { error: errorMsg, requestId });
+      this.emitEvent('error', { error: errorMsg, requestId });
+
+      // Clean, user-friendly responses based on failure category
+      let friendlyText = `Maaf bos, terjadi kesalahan: ${errorMsg}`;
+      const lower = errorMsg.toLowerCase();
+
+      if (
+        lower.includes('ninerouter unavailable') ||
+        lower.includes('econnrefused') ||
+        lower.includes('connection error') ||
+        lower.includes('failed to fetch') ||
+        lower.includes('enotfound')
+      ) {
+        friendlyText = 'Gue nggak bisa terhubung ke AI sekarang. Pastikan 9Router sudah berjalan di localhost:20128.';
+      } else if (
+        lower.includes('unauthorized') ||
+        lower.includes('invalid api key') ||
+        lower.includes('401')
+      ) {
+        friendlyText = 'Gue nggak bisa terhubung ke AI karena API key 9Router belum dikonfigurasi dengan benar di file .env.';
+      } else if (lower.includes('model') && (lower.includes('not found') || lower.includes('unavailable') || lower.includes('404'))) {
+        friendlyText = `Model AI "${model}" tidak tersedia di 9Router.`;
+      } else if (lower.includes('timeout')) {
+        friendlyText = 'AI membutuhkan waktu terlalu lama untuk merespons (timeout).';
+      }
 
       // Return to idle after error
       setTimeout(() => {
@@ -225,11 +631,18 @@ export class AgentRuntime {
       }, 3000);
 
       return {
-        text: `Maaf bos, terjadi kesalahan: ${errorMsg}`,
+        text: friendlyText,
         steps,
         completed: false,
         error: errorMsg,
       };
+    } finally {
+      if (this.currentAbortController === abortController) {
+        this.currentAbortController = undefined;
+      }
     }
   }
 }
+
+export { AgentRuntime as KacungAgent };
+

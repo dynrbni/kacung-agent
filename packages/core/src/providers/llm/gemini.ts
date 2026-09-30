@@ -14,8 +14,8 @@ export interface GeminiLLMOptions {
 
 export class GeminiLLMProvider implements LLMProvider {
   public name = 'gemini';
+  public model: string;
   private apiKey: string;
-  private model: string;
 
   constructor(options: GeminiLLMOptions) {
     this.apiKey = options.apiKey;

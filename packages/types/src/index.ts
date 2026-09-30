@@ -30,7 +30,21 @@ export interface StateChangeEvent {
  * SENSITIVE: File modifications, standard terminal commands, message sending.
  * DANGEROUS: System configuration, file deletions, destructive terminal commands.
  */
-export type PermissionLevel = 'SAFE' | 'SENSITIVE' | 'DANGEROUS';
+export const PermissionLevel = {
+  SAFE: 'SAFE',
+  SENSITIVE: 'SENSITIVE',
+  DANGEROUS: 'DANGEROUS',
+} as const;
+
+export type PermissionLevel = (typeof PermissionLevel)[keyof typeof PermissionLevel];
+
+export type Tool<TArgs = unknown, TResult = unknown> = {
+  name: string;
+  description: string;
+  inputSchema: unknown;
+  permission: PermissionLevel;
+  execute(args: TArgs): Promise<ToolResult<TResult>>;
+};
 
 export interface ConfirmationRequest {
   id: string;
@@ -60,6 +74,10 @@ export interface ToolParameterProperty {
   enum?: string[];
   default?: unknown;
   items?: ToolParameterProperty;
+  minLength?: number;
+  maxLength?: number;
+  minimum?: number;
+  maximum?: number;
 }
 
 export interface ToolParametersSchema {
@@ -136,6 +154,7 @@ export interface AgentStep {
 }
 
 export interface AgentRunOptions {
+  requestId?: string;
   maxSteps?: number;
   temperature?: number;
   context?: Record<string, unknown>;
@@ -167,6 +186,8 @@ export interface LLMCompletionResponse {
 
 export interface LLMProvider {
   name: string;
+  model?: string;
+  baseUrl?: string;
   complete: (options: LLMCompletionOptions) => Promise<LLMCompletionResponse>;
 }
 
@@ -260,4 +281,141 @@ export interface AssistantEvent<T = unknown> {
   type: AssistantEventType;
   payload: T;
   timestamp: number;
+}
+
+// ============================================================================
+// Computer Use & UI Inspection Types
+// ============================================================================
+
+export interface UIElement {
+  role: string;
+  title?: string;
+  value?: string;
+  description?: string;
+  frame?: { x: number; y: number; width: number; height: number };
+  actions?: string[];
+  children?: UIElement[];
+  focused?: boolean;
+  enabled?: boolean;
+}
+
+export interface TaskObservation {
+  timestamp: number;
+  type: 'screen' | 'ui' | 'app_state' | 'command_output' | 'error' | 'verification';
+  data: unknown;
+}
+
+export interface TaskAction {
+  timestamp: number;
+  name: string;
+  parameters: Record<string, unknown>;
+}
+
+export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
+
+export interface TaskContext {
+  taskId: string;
+  goal: string;
+  currentApp?: string;
+  observations: TaskObservation[];
+  actions: TaskAction[];
+  results: ToolResult[];
+  status: TaskStatus;
+}
+
+export interface VerificationResult {
+  verified: boolean;
+  action: string;
+  target?: string;
+  details: string;
+}
+
+// ============================================================================
+// Transcript & Voice Pipeline Types
+// ============================================================================
+
+export interface TranscriptCorrection {
+  from: string;
+  to: string;
+  reason: string;
+}
+
+export interface ProcessedTranscript {
+  rawTranscript: string;
+  normalizedTranscript: string;
+  confidence: number;
+  detectedLanguage: 'id' | 'en' | 'mixed';
+  isValid: boolean;
+  validationReason?: string;
+  hasCorrections: boolean;
+  corrections: TranscriptCorrection[];
+}
+
+// ============================================================================
+// Structured Intent & Messaging Command Pipeline
+// ============================================================================
+
+export type StructuredActionIntent =
+  | {
+      intent: 'send_whatsapp_message';
+      recipient: string;
+      message: string;
+      rawMarker?: string;
+    }
+  | {
+      intent: 'open_whatsapp_chat';
+      recipient: string;
+      messageMissing?: boolean;
+    }
+  | {
+      intent: 'open_app';
+      app: string;
+    }
+  | {
+      intent: 'play_music';
+      query: string;
+      app?: string;
+    }
+  | {
+      intent: 'unknown';
+      query: string;
+    };
+
+export interface WhatsAppIntentValidation {
+  valid: boolean;
+  reason?: 'recipient_missing' | 'message_missing' | 'invalid_intent' | 'ok';
+  recipient?: string;
+  message?: string;
+}
+
+export interface CommandParseResult {
+  rawTranscript: string;
+  normalizedTranscript: string;
+  actions: StructuredActionIntent[];
+  isStructured: boolean;
+  primaryIntent?: StructuredActionIntent;
+  validation?: WhatsAppIntentValidation;
+}
+
+export interface CommandTrace {
+  rawTranscript: string;
+  parsedIntent: StructuredActionIntent | StructuredActionIntent[];
+  validation: {
+    recipient: 'valid' | 'missing' | 'empty';
+    message: 'valid' | 'missing' | 'empty' | 'na';
+    reason?: string;
+  };
+  contactResolution?: {
+    query: string;
+    resolved: boolean;
+    contactName?: string;
+  };
+  execution?: {
+    tool: string;
+    parameters: Record<string, unknown>;
+  };
+  result?: {
+    success: boolean;
+    details?: string;
+  };
 }

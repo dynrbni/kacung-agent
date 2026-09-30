@@ -13,6 +13,8 @@ describe('KacungAgentApp Server', () => {
     llm: {
       provider: 'mock',
       model: 'mock',
+      nineRouterBaseUrl: 'http://localhost:20128/v1',
+      nineRouterModel: 'ag/gemini-3.8-flash-high',
       ollamaBaseUrl: '',
       ollamaModel: '',
     },
