@@ -4,19 +4,38 @@ import SwiftUI
 final class NotchHostingView<Content: View>: NSHostingView<Content> {
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard AppState.shared.isVisibleOnScreen else { return nil }
-        
+
         // Cocoa view coordinates: y=0 is bottom, y=bounds.height is top.
-        // Active island content is anchored at the top of the hosting view.
-        let activeHeight: CGFloat = AppState.shared.isOutputExpanded ? 240.0 : (AppState.shared.notchTopInset > 0 ? AppState.shared.notchTopInset + 4.0 : 36.0)
-        let islandBottomY = bounds.height - activeHeight
-        
-        // If mouse is below the active island area, pass through to windows underneath
+        // Determine active hit area based on current state.
+        let state = AppState.shared.state
+        let isExpanded = AppState.shared.isOutputExpanded && !AppState.shared.lastResponse.isEmpty
+        let isActiveState = (state == .thinking || state == .executing || state == .error)
+
+        // Height of the interactive notch area
+        let barHeight: CGFloat
+        if isExpanded {
+            barHeight = 280.0 // bar + dropdown panel
+        } else if isActiveState {
+            barHeight = 52.0  // expanded bar
+        } else {
+            barHeight = (AppState.shared.notchTopInset > 0 ? AppState.shared.notchTopInset + 4.0 : 40.0)
+        }
+
+        let islandBottomY = bounds.height - barHeight
         if point.y < islandBottomY {
             return nil
         }
 
-        // Pass through mouse clicks to left/right of the compact notch island
-        let activeWidth: CGFloat = 350.0
+        // Width of the interactive notch area
+        let activeWidth: CGFloat
+        if isExpanded {
+            activeWidth = 420.0
+        } else if isActiveState {
+            activeWidth = 400.0
+        } else {
+            activeWidth = 350.0
+        }
+
         let islandLeftX = (bounds.width - activeWidth) / 2.0
         let islandRightX = islandLeftX + activeWidth
         if point.x < islandLeftX || point.x > islandRightX {
