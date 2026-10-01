@@ -66,6 +66,29 @@ export class FileMemoryStore implements MemoryStore {
     });
   }
 
+  /**
+   * Edits an item in place. The id and createdAt are preserved so references
+   * held elsewhere stay valid across an edit.
+   */
+  public async update(
+    id: string,
+    patch: Partial<Pick<MemoryItem, 'content' | 'category' | 'metadata'>>
+  ): Promise<MemoryItem | null> {
+    const existing = this.items.get(id);
+    if (!existing) return null;
+
+    const updated: MemoryItem = {
+      ...existing,
+      ...patch,
+      id: existing.id,
+      createdAt: existing.createdAt,
+      updatedAt: Date.now(),
+    };
+    this.items.set(id, updated);
+    this.persist();
+    return updated;
+  }
+
   public async delete(id: string): Promise<boolean> {
     const existed = this.items.delete(id);
     if (existed) {

@@ -16,6 +16,17 @@ public final class AgentClient: ObservableObject {
     public var onSpeechEnd: ((String) -> Void)?
     public var onError: ((String) -> Void)?
 
+    // Tool and task streaming. The desktop app renders progress from these
+    // rather than from a second agent, so both surfaces agree.
+    public var onToolStart: ((String, [String: Any]) -> Void)?
+    public var onToolEnd: ((String, Bool, String?) -> Void)?
+    public var onTaskUpdate: ((TaskSnapshot) -> Void)?
+
+    /// Polls the server only when the socket is down. The socket remains the
+    /// primary transport, so an idle app does no request traffic.
+    private var reconnectProbe: Timer?
+    private var healthCheckEnabled = false
+
     private init(host: String = "127.0.0.1", port: Int = 3847) {
         self.baseURL = URL(string: "http://\(host):\(port)")!
         self.wsURL = URL(string: "ws://\(host):\(port)/ws")!
@@ -111,10 +122,58 @@ public final class AgentClient: ObservableObject {
                     self.onError?(errorMsg)
                 }
 
+            case "tool_start":
+                if let payload = json["payload"] as? [String: Any],
+                   let toolName = payload["toolName"] as? String {
+                    self.onToolStart?(toolName, payload)
+                }
+
+            case "tool_end":
+                if let payload = json["payload"] as? [String: Any],
+                   let toolName = payload["toolName"] as? String {
+                    let success = (payload["success"] as? Bool) ?? false
+                    self.onToolEnd?(toolName, success, payload["error"] as? String)
+                }
+
+            case "task_update":
+                if let payload = json["payload"] as? [String: Any],
+                   let payloadData = try? JSONSerialization.data(withJSONObject: payload),
+                   let task = try? JSONDecoder().decode(TaskSnapshot.self, from: payloadData) {
+                    self.onTaskUpdate?(task)
+                }
+
             default:
                 break
             }
         }
+    }
+
+    /// Verifies the server is actually reachable rather than trusting that the
+    /// socket was created. Used for the connection indicator in the sidebar.
+    public func checkHealth(completion: @escaping (Bool) -> Void) {
+        let endpoint = baseURL.appendingPathComponent("health")
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 2.0
+
+        urlSession.dataTask(with: request) { _, response, error in
+            let ok = error == nil && (response as? HTTPURLResponse)?.statusCode == 200
+            DispatchQueue.main.async { completion(ok) }
+        }.resume()
+    }
+
+    public func setHealthCheckEnabled(_ enabled: Bool) {
+        healthCheckEnabled = enabled
+        reconnectProbe?.invalidate()
+        reconnectProbe = enabled
+            ? Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+                guard let self = self, !self.isConnected else { return }
+                self.checkHealth { [weak self] ok in
+                    guard let self = self, ok, !self.isConnected else { return }
+                    self.connect()
+                }
+            }
+            : nil
     }
 
     public func sendQuery(text: String, completion: @escaping (Result<AgentQueryResponse, Error>) -> Void) {
@@ -216,5 +275,203 @@ public final class AgentClient: ObservableObject {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         urlSession.dataTask(with: request).resume()
+    }
+
+    // MARK: - Desktop control center
+
+    private func send<T: Decodable>(
+        _ method: String,
+        _ path: String,
+        body: [String: Any]? = nil,
+        as type: T.Type,
+        completion: @escaping (Result<T, Error>) -> Void
+    ) {
+        let endpoint = baseURL.appendingPathComponent(path)
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 8.0
+
+        if let body {
+            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        }
+
+        urlSession.dataTask(with: request) { data, response, error in
+            if let error {
+                DispatchQueue.main.async { completion(.failure(error)) }
+                return
+            }
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard let data, (200..<300).contains(status) else {
+                DispatchQueue.main.async {
+                    completion(.failure(NSError(
+                        domain: "AgentClient",
+                        code: -3,
+                        userInfo: [NSLocalizedDescriptionKey: "Agent server returned HTTP \(status)."]
+                    )))
+                }
+                return
+            }
+            do {
+                let decoded = try JSONDecoder().decode(T.self, from: data)
+                DispatchQueue.main.async { completion(.success(decoded)) }
+            } catch {
+                DispatchQueue.main.async { completion(.failure(error)) }
+            }
+        }.resume()
+    }
+
+    private struct ConversationListResponse: Decodable {
+        var conversations: [ConversationSummary]
+        var activeConversationId: String?
+    }
+
+    private struct ConversationResponse: Decodable {
+        var conversation: Conversation
+    }
+
+    private struct TaskListResponse: Decodable {
+        var tasks: [TaskSnapshot]
+        var activeTask: TaskSnapshot?
+    }
+
+    private struct TaskResponse: Decodable {
+        var task: TaskSnapshot?
+    }
+
+    private struct MemoryResponse: Decodable {
+        var memory: [MemoryItem]
+    }
+
+    private struct ActivityResponse: Decodable {
+        var activity: [ActivityEntry]
+    }
+
+    private struct IntegrationsResponse: Decodable {
+        var integrations: [IntegrationDescriptor]
+    }
+
+    private struct SettingsResponse: Decodable {
+        var settings: LaflySettings
+    }
+
+    private struct AccountResponse: Decodable {
+        var account: AccountSession
+    }
+
+    private struct SimpleResponse: Decodable {
+        var success: Bool?
+    }
+
+    public func listConversations(search: String? = nil, completion: @escaping (Result<[ConversationSummary], Error>) -> Void) {
+        var path = "conversations"
+        if let search, !search.isEmpty {
+            path += "?q=\(search.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
+        }
+        send("GET", path, as: ConversationListResponse.self) { result in
+            completion(result.map { $0.conversations })
+        }
+    }
+
+    public func createConversation(completion: @escaping (Result<Conversation, Error>) -> Void) {
+        send("POST", "conversations", body: [:], as: ConversationResponse.self) {
+            completion($0.map { $0.conversation })
+        }
+    }
+
+    public func loadConversation(id: String, completion: @escaping (Result<Conversation, Error>) -> Void) {
+        send("GET", "conversations/\(id)", as: ConversationResponse.self) {
+            completion($0.map { $0.conversation })
+        }
+    }
+
+    public func renameConversation(id: String, title: String, completion: ((Result<Conversation, Error>) -> Void)? = nil) {
+        send("PATCH", "conversations/\(id)", body: ["title": title], as: ConversationResponse.self) {
+            completion?($0.map { $0.conversation })
+        }
+    }
+
+    public func deleteConversation(id: String, completion: ((Result<Bool, Error>) -> Void)? = nil) {
+        send("DELETE", "conversations/\(id)", as: SimpleResponse.self) {
+            completion?($0.map { $0.success ?? false })
+        }
+    }
+
+    public func listTasks(completion: @escaping (Result<[TaskSnapshot], Error>) -> Void) {
+        send("GET", "tasks", as: TaskListResponse.self) {
+            completion($0.map { $0.tasks })
+        }
+    }
+
+    public func cancelTask(id: String, completion: ((Result<TaskSnapshot?, Error>) -> Void)? = nil) {
+        send("POST", "tasks/\(id)/cancel", as: TaskResponse.self) {
+            completion?($0.map { $0.task })
+        }
+    }
+
+    public func listMemory(completion: @escaping (Result<[MemoryItem], Error>) -> Void) {
+        send("GET", "memory", as: MemoryResponse.self) {
+            completion($0.map { $0.memory })
+        }
+    }
+
+    public func updateMemory(id: String, content: String, completion: ((Result<Bool, Error>) -> Void)? = nil) {
+        send("PATCH", "memory/\(id)", body: ["content": content], as: SimpleResponse.self) {
+            completion?($0.map { $0.success ?? false })
+        }
+    }
+
+    public func deleteMemory(id: String, completion: ((Result<Bool, Error>) -> Void)? = nil) {
+        send("DELETE", "memory/\(id)", as: SimpleResponse.self) {
+            completion?($0.map { $0.success ?? false })
+        }
+    }
+
+    public func clearMemory(completion: ((Result<Bool, Error>) -> Void)? = nil) {
+        send("DELETE", "memory", as: SimpleResponse.self) {
+            completion?($0.map { $0.success ?? false })
+        }
+    }
+
+    public func listActivity(limit: Int = 200, completion: @escaping (Result<[ActivityEntry], Error>) -> Void) {
+        send("GET", "activity?limit=\(limit)", as: ActivityResponse.self) {
+            completion($0.map { $0.activity })
+        }
+    }
+
+    public func listIntegrations(completion: @escaping (Result<[IntegrationDescriptor], Error>) -> Void) {
+        send("GET", "integrations", as: IntegrationsResponse.self) {
+            completion($0.map { $0.integrations })
+        }
+    }
+
+    public func loadSettings(completion: @escaping (Result<LaflySettings, Error>) -> Void) {
+        send("GET", "settings", as: SettingsResponse.self) {
+            completion($0.map { $0.settings })
+        }
+    }
+
+    public func updateSettings(_ patch: [String: Any], completion: ((Result<LaflySettings, Error>) -> Void)? = nil) {
+        send("PATCH", "settings", body: patch, as: SettingsResponse.self) {
+            completion?($0.map { $0.settings })
+        }
+    }
+
+    public func loadAccount(completion: @escaping (Result<AccountSession, Error>) -> Void) {
+        send("GET", "account", as: AccountResponse.self) {
+            completion($0.map { $0.account })
+        }
+    }
+
+    public func signIn(displayName: String, completion: @escaping (Result<AccountSession, Error>) -> Void) {
+        send("POST", "account/sign-in", body: ["displayName": displayName], as: AccountResponse.self) {
+            completion($0.map { $0.account })
+        }
+    }
+
+    public func signOut(completion: @escaping (Result<AccountSession, Error>) -> Void) {
+        send("POST", "account/sign-out", as: AccountResponse.self) {
+            completion($0.map { $0.account })
+        }
     }
 }

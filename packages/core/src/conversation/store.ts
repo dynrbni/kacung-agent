@@ -38,6 +38,7 @@ export class FileConversationStore implements ConversationStore {
   private filePath: string;
   private conversations = new Map<string, Conversation>();
   private writeScheduled = false;
+  private nextSeq = 1;
 
   constructor(customPath?: string) {
     const dir = path.join(os.homedir(), '.lafly');
@@ -55,7 +56,9 @@ export class FileConversationStore implements ConversationStore {
       const list = JSON.parse(raw) as Conversation[];
       this.conversations.clear();
       for (const conversation of list) {
-        this.conversations.set(conversation.id, conversation);
+        // Tolerate records written before the sequence counter existed.
+        this.conversations.set(conversation.id, { ...conversation, seq: conversation.seq ?? 0 });
+        this.nextSeq = Math.max(this.nextSeq, (conversation.seq ?? 0) + 1);
       }
     } catch {
       this.conversations.clear();
@@ -78,7 +81,14 @@ export class FileConversationStore implements ConversationStore {
   }
 
   public async list(): Promise<Conversation[]> {
-    return Array.from(this.conversations.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+    return this.sorted();
+  }
+
+  /** Newest first, with the sequence number breaking millisecond ties. */
+  private sorted(): Conversation[] {
+    return Array.from(this.conversations.values()).sort(
+      (a, b) => b.updatedAt - a.updatedAt || b.seq - a.seq
+    );
   }
 
   public async get(id: string): Promise<Conversation | null> {
@@ -92,6 +102,7 @@ export class FileConversationStore implements ConversationStore {
       title,
       createdAt: now,
       updatedAt: now,
+      seq: this.nextSeq++,
       messages: [],
       taskReferences: [],
     };
@@ -149,6 +160,6 @@ export class FileConversationStore implements ConversationStore {
     const results = Array.from(this.conversations.values()).filter(
       (c) => c.title.toLowerCase().includes(q) || c.messages.some((m) => m.text.toLowerCase().includes(q))
     );
-    return results.sort((a, b) => b.updatedAt - a.updatedAt);
+    return results.sort((a, b) => b.updatedAt - a.updatedAt || b.seq - a.seq);
   }
 }

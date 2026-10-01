@@ -70,8 +70,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Start quietly in background; overlay only appears on Control + Option hotkey trigger
         AppState.shared.hideOverlay()
 
+        // The activation policy stays .accessory: the app has no Dock icon and
+        // closing the desktop window only hides it, so background tasks and the
+        // notch keep working.
+        NotificationService.shared.requestAuthorization()
+
         NSLog("[Lafly] applicationDidFinishLaunching - AXIsProcessTrusted: %d", AXIsProcessTrusted() ? 1 : 0)
         print("Lafly macOS application initialized successfully in background. Press Control+Option to summon.")
+    }
+
+    /// Closing the desktop window must not terminate the app; a running task
+    /// has to be allowed to finish.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
     }
 
     private func setupStatusItem() {
@@ -86,7 +97,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let popover = NSPopover()
         popover.contentSize = NSSize(width: 240, height: 260)
         popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: MenuBarView(appState: AppState.shared))
+        popover.contentViewController = NSHostingController(
+            rootView: MenuBarView(appState: AppState.shared) {
+                popover.performClose(nil)
+                DesktopWindowController.shared.show()
+            }
+        )
         self.popover = popover
     }
 

@@ -130,6 +130,12 @@ export interface Conversation {
   title: string;
   createdAt: number;
   updatedAt: number;
+  /**
+   * Monotonic insertion counter. Wall-clock timestamps collide when several
+   * conversations are created in the same millisecond, so ordering and
+   * pagination rely on this instead.
+   */
+  seq: number;
   messages: ConversationMessage[];
   taskReferences: string[];
 }
@@ -383,6 +389,11 @@ export interface MemoryStore {
   save: (item: Omit<MemoryItem, 'id' | 'createdAt' | 'updatedAt'>) => Promise<MemoryItem>;
   get: (id: string) => Promise<MemoryItem | null>;
   search: (query: string, category?: string) => Promise<MemoryItem[]>;
+  /** Edits an item in place. The id and createdAt are preserved. */
+  update: (
+    id: string,
+    patch: Partial<Pick<MemoryItem, 'content' | 'category' | 'metadata'>>
+  ) => Promise<MemoryItem | null>;
   delete: (id: string) => Promise<boolean>;
   list: () => Promise<MemoryItem[]>;
 }

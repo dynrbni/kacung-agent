@@ -2,9 +2,11 @@ import SwiftUI
 
 public struct MenuBarView: View {
     @ObservedObject public var appState: AppState
+    private let onOpenDesktop: () -> Void
 
-    public init(appState: AppState) {
+    public init(appState: AppState, onOpenDesktop: @escaping () -> Void = {}) {
         self.appState = appState
+        self.onOpenDesktop = onOpenDesktop
     }
 
     public var body: some View {
@@ -59,6 +61,16 @@ public struct MenuBarView: View {
                 HStack {
                     Image(systemName: "arrow.counterclockwise")
                     Text("Reset Conversation")
+                }
+            }
+            .buttonStyle(.plain)
+
+            // Desktop companion: chat, tasks, memory and settings.
+            Button(action: onOpenDesktop) {
+                HStack {
+                    Image(systemName: "macwindow")
+                    Text("Open Lafly Desktop")
+                    Spacer()
                 }
             }
             .buttonStyle(.plain)

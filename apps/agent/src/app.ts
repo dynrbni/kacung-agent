@@ -36,6 +36,17 @@ export interface LaflyAppOptions {
   config?: LaflyConfig;
   llmProvider?: LLMProvider;
   ttsProvider?: TextToSpeechProvider;
+
+  /**
+   * Store overrides. Tests inject isolated paths so the suite never reads or
+   * writes the developer's real ~/.lafly data.
+   */
+  conversations?: FileConversationStore;
+  memory?: FileMemoryStore;
+  tasks?: TaskManager;
+  activity?: ActivityLog;
+  settings?: SettingsStore;
+  account?: AccountStore;
 }
 
 export class LaflyAgentApp {
@@ -95,12 +106,12 @@ export class LaflyAgentApp {
     });
 
     // 5. Shared stores backing the desktop control center
-    this.conversations = new FileConversationStore();
-    this.memory = new FileMemoryStore();
-    this.tasks = new TaskManager();
-    this.activity = new ActivityLog();
-    this.settings = new SettingsStore();
-    this.account = new AccountStore();
+    this.conversations = options.conversations || new FileConversationStore();
+    this.memory = options.memory || new FileMemoryStore();
+    this.tasks = options.tasks || new TaskManager();
+    this.activity = options.activity || new ActivityLog();
+    this.settings = options.settings || new SettingsStore();
+    this.account = options.account || new AccountStore();
 
     // 6. Create HTTP & WebSocket Servers
     this.httpServer = http.createServer((req, res) => this.handleHttpRequest(req, res));
@@ -680,22 +691,16 @@ export class LaflyAgentApp {
 
       if (req.method === 'PATCH') {
         const body = await readBody();
-        const existing = await this.memory.get(id);
-        if (!existing) {
+        const patch: Parameters<typeof this.memory.update>[1] = {};
+        if (typeof body.content === 'string') patch.content = body.content;
+        if (body.category !== undefined) patch.category = readCategory(body.category, 'fact');
+
+        const updated = await this.memory.update(id, patch);
+        if (!updated) {
           sendJson(404, { error: `Memory "${id}" not found.` });
           return;
         }
-        if (typeof body.content === 'string') {
-          await this.memory.delete(id);
-          const replaced = await this.memory.save({
-            category: readCategory(body.category, existing.category),
-            content: body.content,
-            metadata: existing.metadata,
-          });
-          sendJson(200, { success: true, memory: replaced });
-          return;
-        }
-        sendJson(200, { success: true, memory: existing });
+        sendJson(200, { success: true, memory: updated });
         return;
       }
     }
