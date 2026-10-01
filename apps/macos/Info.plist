@@ -3,28 +3,32 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>com.dynrbni.lafly</string>
+    <string>com.dynrbni.lofly</string>
     <key>CFBundleName</key>
-    <string>Lafly</string>
+    <string>Lofly</string>
     <key>CFBundleDisplayName</key>
-    <string>Lafly</string>
+    <string>Lofly</string>
     <key>CFBundleExecutable</key>
-    <string>Lafly</string>
+    <string>Lofly</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
     <string>0.1.0</string>
     <key>CFBundleVersion</key>
     <string>1</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleIconName</key>
+    <string>AppIcon</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>LSUIElement</key>
-    <true/>
+    <false/>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Lafly memerlukan akses mikrofon untuk mendengarkan perintah suara Anda.</string>
+    <string>Lofly memerlukan akses mikrofon untuk mendengarkan perintah suara Anda.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
-    <string>Lafly memerlukan pengenalan suara untuk mengubah ucapan Anda menjadi teks.</string>
+    <string>Lofly memerlukan pengenalan suara untuk mengubah ucapan Anda menjadi teks.</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Lafly memerlukan Apple Events untuk mengontrol aplikasi macOS.</string>
+    <string>Lofly memerlukan Apple Events untuk mengontrol aplikasi macOS.</string>
 </dict>
 </plist>

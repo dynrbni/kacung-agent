@@ -1,6 +1,6 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@lafly/types';
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@lofly/types';
 import { toolSafety } from '../safety/policy.js';
 
 const execFileAsync = promisify(execFile);

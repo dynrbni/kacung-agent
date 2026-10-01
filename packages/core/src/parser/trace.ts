@@ -1,4 +1,4 @@
-import type { CommandTrace } from '@lafly/types';
+import type { CommandTrace } from '@lofly/types';
 
 /**
  * Formats a structured internal command trace for logging and debugging.

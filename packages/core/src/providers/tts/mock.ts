@@ -1,4 +1,4 @@
-import type { TextToSpeechProvider, TTSOptions } from '@lafly/types';
+import type { TextToSpeechProvider, TTSOptions } from '@lofly/types';
 
 export class MockTTSProvider implements TextToSpeechProvider {
   public name = 'mock-tts';

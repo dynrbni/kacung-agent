@@ -1,9 +1,9 @@
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
-import type { LogLevel } from '@lafly/types';
+import type { LogLevel } from '@lofly/types';
 
-export interface LaflyConfig {
+export interface LoflyConfig {
   server: {
     port: number;
     host: string;
@@ -44,9 +44,9 @@ export interface LaflyConfig {
   };
 }
 
-let cachedConfig: LaflyConfig | null = null;
+let cachedConfig: LoflyConfig | null = null;
 
-export function loadConfig(envPath?: string): LaflyConfig {
+export function loadConfig(envPath?: string): LoflyConfig {
   if (cachedConfig && !envPath) {
     return cachedConfig;
   }
@@ -77,14 +77,14 @@ export function loadConfig(envPath?: string): LaflyConfig {
   const defaultNineRouterModel = env.NINEROUTER_MODEL || 'ag/gemini-3.8-flash-high';
   const defaultNineRouterBaseUrl = env.NINEROUTER_BASE_URL || 'http://localhost:20128/v1';
 
-  const config: LaflyConfig = {
+  const config: LoflyConfig = {
     server: {
       port: parseInt(env.PORT || '3847', 10),
       host: env.HOST || '127.0.0.1',
     },
     llm: {
       provider:
-        (env.LLM_PROVIDER as LaflyConfig['llm']['provider']) ||
+        (env.LLM_PROVIDER as LoflyConfig['llm']['provider']) ||
         (env.NINEROUTER_API_KEY !== undefined || env.NINEROUTER_BASE_URL !== undefined ? 'ninerouter' : 'mock'),
       model: env.NINEROUTER_MODEL || env.LLM_MODEL || defaultNineRouterModel,
       nineRouterBaseUrl: defaultNineRouterBaseUrl,
@@ -97,17 +97,17 @@ export function loadConfig(envPath?: string): LaflyConfig {
       ollamaModel: env.OLLAMA_MODEL || 'llama3.2',
     },
     stt: {
-      provider: (env.STT_PROVIDER as LaflyConfig['stt']['provider']) || 'apple',
+      provider: (env.STT_PROVIDER as LoflyConfig['stt']['provider']) || 'apple',
       groqApiKey: env.GROQ_API_KEY,
     },
     tts: {
-      provider: (env.TTS_PROVIDER as LaflyConfig['tts']['provider']) || 'macos',
+      provider: (env.TTS_PROVIDER as LoflyConfig['tts']['provider']) || 'macos',
       voice: env.TTS_VOICE || 'Damayanti',
       speed: 1.0,
     },
     assistant: {
-      name: env.ASSISTANT_NAME || 'Lafly',
-      wakePhrase: env.WAKE_PHRASE || 'Woi Lafly',
+      name: env.ASSISTANT_NAME || 'Lofly',
+      wakePhrase: env.WAKE_PHRASE || 'Woi Lofly',
       languages: (env.DEFAULT_LANGUAGES || 'id,en').split(',').map((s) => s.trim()),
       hotkeyFallback: env.HOTKEY_FALLBACK || 'Control+Option',
     },
@@ -127,6 +127,6 @@ export function loadConfig(envPath?: string): LaflyConfig {
   return config;
 }
 
-export function getConfig(): LaflyConfig {
+export function getConfig(): LoflyConfig {
   return loadConfig();
 }

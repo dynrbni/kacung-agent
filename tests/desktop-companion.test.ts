@@ -11,19 +11,22 @@ import {
   ActivityLog,
   SettingsStore,
   AccountStore,
+  MockLLMProvider,
+  MockTTSProvider,
   deriveTitle,
   humanizeToolName,
-} from '@lafly/core';
-import { LaflyAgentApp } from '../apps/agent/src/app.js';
+} from '@lofly/core';
+import { ToolRegistry } from '@lofly/tools';
+import { LoflyAgentApp } from '../apps/agent/src/app.js';
 
-// Isolated stores so tests never touch the developer's real ~/.lafly data.
+// Isolated stores so tests never touch the developer's real ~/.lofly data.
 function tmpPath(name: string): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lafly-desktop-test-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lofly-desktop-test-'));
   return path.join(dir, name);
 }
 
 function isolatedStores() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lafly-desktop-app-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lofly-desktop-app-'));
   return {
     conversations: new FileConversationStore(path.join(dir, 'conversations.json')),
     memory: new FileMemoryStore(path.join(dir, 'memory.json')),
@@ -47,7 +50,7 @@ function testConfig() {
     },
     stt: { provider: 'mock' as const },
     tts: { provider: 'mock' as const, voice: '', speed: 1 },
-    assistant: { name: 'Lafly', wakePhrase: 'Woi Lafly', languages: ['id'], hotkeyFallback: 'Control+Option' },
+    assistant: { name: 'Lofly', wakePhrase: 'Woi Lofly', languages: ['id'], hotkeyFallback: 'Control+Option' },
     security: { confirmSensitiveActions: true, confirmDangerousActions: true },
     logging: { level: 'error' as const },
   };
@@ -269,7 +272,7 @@ describe('Desktop — tool label humanisation', () => {
 describe('Desktop — settings and account', () => {
   it('starts from defaults and merges a partial patch', () => {
     const settings = new SettingsStore(tmpPath('settings.json'));
-    expect(settings.get()).toEqual(LaflySettingsDefaults);
+    expect(settings.get()).toEqual(LoflySettingsDefaults);
 
     const updated = settings.update({ debugMode: true });
     expect(updated.debugMode).toBe(true);
@@ -292,8 +295,8 @@ describe('Desktop — settings and account', () => {
   });
 });
 
-// Mirrors LaflySettings.default on the Swift side.
-const LaflySettingsDefaults = {
+// Mirrors LoflySettings.default on the Swift side.
+const LoflySettingsDefaults = {
   hotkeyEnabled: true,
   hotkeyFallback: 'Control+Option',
   languages: ['id', 'en'],
@@ -307,12 +310,12 @@ const LaflySettingsDefaults = {
 };
 
 describe('Desktop — control center HTTP surface', () => {
-  let app: LaflyAgentApp;
+  let app: LoflyAgentApp;
   let baseUrl: string;
   let port: number;
 
   beforeEach(async () => {
-    app = new LaflyAgentApp({ config: testConfig(), ...isolatedStores() });
+    app = new LoflyAgentApp({ config: testConfig(), ...isolatedStores() });
 
     await app.listen(0, '127.0.0.1');
     port = (app.httpServer.address() as AddressInfo).port;
@@ -340,7 +343,7 @@ describe('Desktop — control center HTTP surface', () => {
   it('exposes health and the active agent', async () => {
     const { status, body } = await get('/health');
     expect(status).toBe(200);
-    expect(body.assistant).toBe('Lafly');
+    expect(body.assistant).toBe('Lofly');
   });
 
   it('creates, lists, loads, renames and deletes a conversation', async () => {
@@ -421,6 +424,58 @@ describe('Desktop — control center HTTP surface', () => {
     expect(updated.body.settings.debugMode).toBe(true);
   });
 
+  it('answers a malformed body instead of leaving the request hanging', async () => {
+    // These routes read a body without their own try/catch, so an unreadable
+    // body used to escape as an unhandled rejection and the socket was never
+    // answered at all — the client waited until it timed out.
+    const routes: Array<[string, string]> = [
+      ['POST', '/query'],
+      ['POST', '/memory'],
+      ['PATCH', '/settings'],
+      ['POST', '/account/sign-in'],
+    ];
+
+    for (const [method, path] of routes) {
+      const res = await fetch(`${baseUrl}${path}`, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: '{broken',
+        signal: AbortSignal.timeout(3000),
+      });
+
+      expect(res.status, `${method} ${path}`).toBe(400);
+      expect((await res.json()).error, `${method} ${path}`).toBeTruthy();
+    }
+
+    // Still serving: a bad request must not take the server down with it.
+    expect((await get('/health')).status).toBe(200);
+  });
+
+  it('stores only settings values a client can read back', async () => {
+    const before = (await get('/settings')).body.settings;
+
+    await send('PATCH', '/settings', {
+      latencyPreference: 'turbo',
+      logRetentionDays: 'abc',
+      unknownKey: 'nope',
+    });
+
+    // The desktop app decodes this record into typed values, so a value it
+    // cannot read would break the Settings screen until the file was repaired.
+    const after = (await get('/settings')).body.settings;
+    expect(after.latencyPreference).toBe(before.latencyPreference);
+    expect(typeof after.logRetentionDays).toBe('number');
+    expect(after).not.toHaveProperty('unknownKey');
+
+    // A patch of real values still lands.
+    const applied = await send('PATCH', '/settings', {
+      latencyPreference: 'fast',
+      logRetentionDays: 30,
+    });
+    expect(applied.body.settings.latencyPreference).toBe('fast');
+    expect(applied.body.settings.logRetentionDays).toBe(30);
+  });
+
   it('manages the local account session', async () => {
     expect((await get('/account')).body.account.signedIn).toBe(false);
     const signedIn = await send('POST', '/account/sign-in', { displayName: 'Dyn' });
@@ -430,11 +485,11 @@ describe('Desktop — control center HTTP surface', () => {
 });
 
 describe('Desktop — shares one agent and cannot bypass safety', () => {
-  let app: LaflyAgentApp;
+  let app: LoflyAgentApp;
   let baseUrl: string;
 
   beforeEach(async () => {
-    app = new LaflyAgentApp({ config: testConfig(), ...isolatedStores() });
+    app = new LoflyAgentApp({ config: testConfig(), ...isolatedStores() });
     await app.listen(0, '127.0.0.1');
     baseUrl = `http://127.0.0.1:${(app.httpServer.address() as AddressInfo).port}`;
   });
@@ -492,7 +547,6 @@ describe('Desktop — shares one agent and cannot bypass safety', () => {
     expect(conversations.conversations.length).toBeGreaterThan(0);
     expect(conversations.activeConversationId).toBeTruthy();
   });
-
   it('leaves no step stuck running after a run finishes', async () => {
     await fetch(`${baseUrl}/query`, {
       method: 'POST',
@@ -505,5 +559,192 @@ describe('Desktop — shares one agent and cannot bypass safety', () => {
       t.steps.filter((s) => s.state === 'running')
     );
     expect(stuck).toHaveLength(0);
+  });
+});
+
+describe('Desktop — push-to-talk stays out of chat history', () => {
+  let app: LoflyAgentApp;
+  let baseUrl: string;
+
+  beforeEach(async () => {
+    app = new LoflyAgentApp({
+      config: testConfig(),
+      ...isolatedStores(),
+      // These tests target persistence behaviour, not the LLM, so the mock
+      // provider keeps non fast-routable commands offline and instant.
+      llmProvider: new MockLLMProvider(),
+      ttsProvider: new MockTTSProvider(),
+    });
+    await app.listen(0, '127.0.0.1');
+    baseUrl = `http://127.0.0.1:${(app.httpServer.address() as AddressInfo).port}`;
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  const postQuery = (text: string, source?: string) =>
+    fetch(`${baseUrl}/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(source ? { text, source } : { text }),
+    }).then((res) => res.json());
+
+  it('still persists a typed query (default source is text)', async () => {
+    await postQuery('Buka Spotify');
+
+    const conversations = await (await fetch(`${baseUrl}/conversations`)).json();
+    expect(conversations.conversations).toHaveLength(1);
+  });
+
+  it('never stores a voice query in conversation history', async () => {
+    const body = await postQuery('Buka Spotify', 'voice');
+
+    // The run itself is a first-class task through the same runtime.
+    expect(body.taskId).toMatch(/^task_/);
+    expect(body.completed).toBe(true);
+
+    const conversations = await (await fetch(`${baseUrl}/conversations`)).json();
+    expect(conversations.conversations).toHaveLength(0);
+    expect(conversations.activeConversationId).toBeFalsy();
+  });
+
+  it('records the voice interaction in activity even without a tool call', async () => {
+    const body = await postQuery('Jam berapa sekarang?', 'voice');
+    expect(body.completed).toBe(true);
+
+    const activity = await (await fetch(`${baseUrl}/activity`)).json();
+    // The interaction entry has no toolName — it represents the whole spoken
+    // command, not one tool step.
+    const interaction = activity.activity.find(
+      (a: { taskId?: string; toolName?: string }) => a.taskId === body.taskId && !a.toolName
+    );
+    expect(interaction).toBeDefined();
+    expect(interaction.status).toBe('success');
+    expect(interaction.label).toContain('Jam berapa');
+  });
+
+  it('still logs tool-level activity for a voice command that triggers tools', async () => {
+    const body = await postQuery('Buka Spotify', 'voice');
+
+    const activity = await (await fetch(`${baseUrl}/activity`)).json();
+    const toolEntry = activity.activity.find(
+      (a: { taskId?: string; toolName?: string }) =>
+        a.taskId === body.taskId && a.toolName === 'open_app'
+    );
+    expect(toolEntry).toBeDefined();
+    expect(toolEntry.status).toBe('simulated');
+  });
+
+  it('truncates a very long spoken command in the activity label', async () => {
+    const longText = 'tolong ingatkan gue besok pagi buat ngisi timesheet proyek poundasierp';
+    const body = await postQuery(longText, 'voice');
+
+    const activity = await (await fetch(`${baseUrl}/activity`)).json();
+    const interaction = activity.activity.find(
+      (a: { taskId?: string; toolName?: string }) => a.taskId === body.taskId && !a.toolName
+    );
+    expect(interaction).toBeDefined();
+    expect(interaction.label.length).toBeLessThanOrEqual(60);
+  });
+});
+
+describe('Desktop — skills come from the tool registry', () => {
+  let app: LoflyAgentApp;
+  let baseUrl: string;
+
+  beforeEach(async () => {
+    app = new LoflyAgentApp({ config: testConfig(), ...isolatedStores() });
+    await app.listen(0, '127.0.0.1');
+    baseUrl = `http://127.0.0.1:${(app.httpServer.address() as AddressInfo).port}`;
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it('lists exactly the tools the executor can run', async () => {
+    const res = await fetch(`${baseUrl}/skills`);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    // One row per registered tool: the screen cannot advertise a capability
+    // that is not wired up, nor hide one that is.
+    expect(body.skills).toHaveLength(new ToolRegistry().count());
+    expect(body.skills.map((s: { id: string }) => s.id)).toContain('set_volume');
+  });
+
+  it('describes each skill without exposing schemas or credentials', async () => {
+    const body = await (await fetch(`${baseUrl}/skills`)).json();
+
+    for (const skill of body.skills) {
+      expect(Object.keys(skill).sort()).toEqual([
+        'description',
+        'id',
+        'name',
+        'permissionLevel',
+        'sideEffect',
+        'simulated',
+        'summary',
+      ]);
+      expect(['SAFE', 'SENSITIVE', 'DANGEROUS']).toContain(skill.permissionLevel);
+      expect(['none', 'reversible', 'external', 'destructive']).toContain(skill.sideEffect);
+      expect(skill.name.length).toBeGreaterThan(0);
+      expect(skill.description.length).toBeGreaterThan(0);
+    }
+
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toMatch(/sk-[A-Za-z0-9]{16,}/);
+    expect(serialized).not.toMatch(/Bearer\s+\S/);
+    // Parameter schemas are execution detail, not a capability description.
+    expect(serialized).not.toContain('"parameters"');
+  });
+
+  it('reports the execution mode so a simulated skill is never shown as live', async () => {
+    const body = await (await fetch(`${baseUrl}/skills`)).json();
+
+    expect(['dry_run', 'sandbox', 'live']).toContain(body.executionMode);
+    for (const skill of body.skills) {
+      expect(skill.simulated).toBe(body.executionMode !== 'live');
+    }
+  });
+
+  it('names capabilities, not things that already happened', async () => {
+    const body = await (await fetch(`${baseUrl}/skills`)).json();
+    const byId = new Map(body.skills.map((s: { id: string }) => [s.id, s]));
+
+    // These three used to render the activity log's past tense: "Opened
+    // application", and "Captured screen" twice for two different tools.
+    expect(byId.get('open_app').name).toBe('Open an app');
+    expect(byId.get('screenshot').name).toBe('Take a screenshot of the screen');
+    expect(byId.get('screenshot_app').name).toBe("Capture one app's window");
+
+    for (const skill of body.skills) {
+      expect(skill.name).not.toMatch(
+        /\b(Opened|Closed|Captured|Sent|Wrote|Ran|Deleted|Played|Changed|Searched|Copied|Focused|Moved|Listed|Verified|Typed|Pressed|Scrolled|Clicked|Dragged|Inspected|Paused|Waited)\b/
+      );
+      // A tool with no capability phrase falls back to "Use <name>". Failing
+      // here is the point: a new tool needs words a person can read.
+      expect(skill.name.startsWith('Use '), `${skill.id} has no capability phrase`).toBe(false);
+    }
+
+    const names = body.skills.map((s: { name: string }) => s.name);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('shows a whole sentence, never a description cut mid-sentence', async () => {
+    const body = await (await fetch(`${baseUrl}/skills`)).json();
+
+    for (const skill of body.skills) {
+      expect(skill.summary.length).toBeGreaterThan(0);
+      // The visible line is a prefix of the description that stops only where
+      // the description continues with whitespace.
+      expect(skill.description.trim().startsWith(skill.summary)).toBe(true);
+      const rest = skill.description.trim().slice(skill.summary.length);
+      expect(rest === '' || /^\s/.test(rest)).toBe(true);
+      expect(['.', '!', '?'].some((mark) => skill.summary.endsWith(mark)) || rest === '').toBe(true);
+      // "(e.g." is not the end of a sentence.
+      expect(skill.summary).not.toMatch(/\([^)]*$/);
+    }
   });
 });

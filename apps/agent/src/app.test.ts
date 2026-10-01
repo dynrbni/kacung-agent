@@ -1,14 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { WebSocket } from 'ws';
-import { LaflyAgentApp } from './app.js';
-import { MockLLMProvider, MockTTSProvider } from '@lafly/core';
-import type { LaflyConfig } from '@lafly/config';
+import { LoflyAgentApp } from './app.js';
+import { MockLLMProvider, MockTTSProvider } from '@lofly/core';
+import type { LoflyConfig } from '@lofly/config';
 
-describe('LaflyAgentApp Server', () => {
-  let app: LaflyAgentApp;
+describe('LoflyAgentApp Server', () => {
+  let app: LoflyAgentApp;
   const testPort = 3991;
 
-  const testConfig: LaflyConfig = {
+  const testConfig: LoflyConfig = {
     server: { port: testPort, host: '127.0.0.1' },
     llm: {
       provider: 'mock',
@@ -21,8 +21,8 @@ describe('LaflyAgentApp Server', () => {
     stt: { provider: 'mock' },
     tts: { provider: 'mock', voice: 'Damayanti', speed: 1 },
     assistant: {
-      name: 'Lafly',
-      wakePhrase: 'Woi Lafly',
+      name: 'Lofly',
+      wakePhrase: 'Woi Lofly',
       languages: ['id', 'en'],
       hotkeyFallback: 'Option+Space',
     },
@@ -34,7 +34,7 @@ describe('LaflyAgentApp Server', () => {
   };
 
   beforeAll(async () => {
-    app = new LaflyAgentApp({
+    app = new LoflyAgentApp({
       config: testConfig,
       llmProvider: new MockLLMProvider(),
       ttsProvider: new MockTTSProvider(),
@@ -51,7 +51,7 @@ describe('LaflyAgentApp Server', () => {
     expect(res.status).toBe(200);
     const data = (await res.json()) as { status: string; assistant: string };
     expect(data.status).toBe('ok');
-    expect(data.assistant).toBe('Lafly');
+    expect(data.assistant).toBe('Lofly');
   });
 
   it('responds to GET /config with safe assistant info', async () => {
@@ -61,8 +61,8 @@ describe('LaflyAgentApp Server', () => {
       assistant: { name: string; wakePhrase: string };
       tools: unknown[];
     };
-    expect(data.assistant.name).toBe('Lafly');
-    expect(data.assistant.wakePhrase).toBe('Woi Lafly');
+    expect(data.assistant.name).toBe('Lofly');
+    expect(data.assistant.wakePhrase).toBe('Woi Lofly');
     expect(data.tools.length).toBeGreaterThanOrEqual(15);
   });
 

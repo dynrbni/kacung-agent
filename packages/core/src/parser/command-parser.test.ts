@@ -218,4 +218,44 @@ describe('WhatsApp Command Parser & Structured Intent Pipeline', () => {
     expect(trace).toContain('recipient = Reja Agung');
     expect(trace).toContain('message = Yuli bubur');
   });
+
+  it('Test 13: "kirim whatsapp ke reja agung tentang bahayanya rokok lu ambil aja ringkasannya dari google" -> clean recipient & isDynamicGeneration', () => {
+    const input = 'kirim whatsapp ke reja agung tentang bahayanya rokok lu ambil aja ringkasannya dari google';
+    const result = parseCommand(input);
+
+    expect(result.isStructured).toBe(true);
+    expect(result.primaryIntent?.intent).toBe('send_whatsapp_message');
+    if (result.primaryIntent?.intent === 'send_whatsapp_message') {
+      expect(result.primaryIntent.recipient).toBe('reja agung');
+      expect(result.primaryIntent.rawMarker).toBe('tentang');
+      expect(result.primaryIntent.message).toContain('bahayanya rokok');
+      expect(result.primaryIntent.isDynamicGeneration).toBe(true);
+    }
+  });
+
+  it('Test 14: "Chat Reja Agung buat kasih tahu bahayanya ngerokok" -> separates contact from topic', () => {
+    const input = 'Chat Reja Agung buat kasih tahu bahayanya ngerokok';
+    const result = parseCommand(input);
+
+    expect(result.isStructured).toBe(true);
+    expect(result.primaryIntent?.intent).toBe('send_whatsapp_message');
+    if (result.primaryIntent?.intent === 'send_whatsapp_message') {
+      expect(result.primaryIntent.recipient).toBe('Reja Agung');
+      expect(result.primaryIntent.message).toBe('bahayanya ngerokok');
+    }
+  });
+
+  it('Test 15: "Kirim WhatsApp ke Reja Agung isi mess nya" -> detects missing message with clean recipient', () => {
+    const input = 'Kirim WhatsApp ke Reja Agung isi mess nya';
+    const result = parseCommand(input);
+
+    expect(result.isStructured).toBe(true);
+    if (result.primaryIntent?.intent === 'send_whatsapp_message') {
+      expect(result.primaryIntent.recipient).toBe('Reja Agung');
+      expect(result.primaryIntent.message).toBe('');
+    }
+    expect(result.validation?.valid).toBe(false);
+    expect(result.validation?.reason).toBe('message_missing');
+  });
 });
+

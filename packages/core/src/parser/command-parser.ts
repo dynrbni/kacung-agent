@@ -2,7 +2,7 @@ import type {
   StructuredActionIntent,
   CommandParseResult,
   WhatsAppIntentValidation,
-} from '@lafly/types';
+} from '@lofly/types';
 import { validateWhatsAppIntent } from './validator.js';
 
 /**
@@ -12,29 +12,38 @@ import { validateWhatsAppIntent } from './validator.js';
 const MESSAGE_MARKER_PATTERNS = [
   // Indonesian compound markers with connectors
   /\b(?:terus|trus|habis\s+itu|lalu|kemudian|sekalian|sama|dan)\s+(?:send\s+message\s+bilang|message\s+bilang)\b/i,
-  /\b(?:terus|trus|habis\s+itu|lalu|kemudian|sekalian|sama|dan)\s+(?:bilang|tulis|katakan|kirim\s+pesan|kirim\s+chat)\b/i,
-  /\b(?:isi\s+pesannya|dengan\s+isi|dengan\s+pesan)\b/i,
+  /\b(?:terus|trus|habis\s+itu|lalu|kemudian|sekalian|sama|dan)\s+(?:bilang|tulis|katakan|ngomong|kirim\s+pesan|kirim\s+chat)\b/i,
+  /\b(?:isi\s+pesannya|isi\s+pesan|isinya|dengan\s+isi|dengan\s+pesan|pesannya|isi\s+mess\s*nya|isi\s+chat\s*nya)\b/i,
+  // Conversational markers separating recipient and topic / instruction
+  /\b(?:buat\s+kasih\s+tahu|buat\s+ngasih\s+tahu|buat\s+kasitau|buat\s+ngasih\s+tau|kasih\s+tahu|ngasih\s+tahu|kasitau|kasih\s+tau|ngasih\s+tau)\b/i,
+  /\b(?:tentang|mengenai|soal)\b/i,
+  /\b(?:suruh|minta\s+tolong|minta|tanyain|tanya)\b/i,
   // Single Indonesian markers
-  /\b(?:bilang|tulis|katakan|kirim\s+pesan|kirim\s+chat)\b/i,
+  /\b(?:bilang|tulis|katakan|ngomong|kirim\s+pesan|kirim\s+chat)\b/i,
+  // Colon separator e.g. "kirim pesan ke reja agung: yuli bubur"
+  /[:]\s*/,
   // English & code-switching compound markers
   /\b(?:and\s+tell\s+(?:him|her|them)|tell\s+(?:him|her|them)|and\s+tell)\b/i,
   /\b(?:send\s+a\s+message\s+saying|message\s+(?:him|her|them)\s+saying|text\s+(?:him|her|them)\s+saying)\b/i,
   /\b(?:saying|and\s+saying)\b/i,
+  /\b(?:about|regarding)\b/i,
   /\b(?:say|tell)\b/i,
 ];
+
+export const DYNAMIC_RESEARCH_REGEX = /\b(?:google|dari\s+google|cari\s+di\s+google|ringkas(?:an)?(?:nya)?|rangkum(?:an)?|bikinin|buatkan|cariin|riset|ambil\s+(?:aja\s+)?ringkasan)\b/i;
 
 /**
  * Action prefix matcher for messaging commands.
  */
 const MESSAGING_PREFIX_PATTERNS = [
-  // "WhatsApp Reja Agung", "Open WhatsApp terus message Reja Agung"
-  /^(?:coba\s+|tolong\s+|please\s+)?(?:open\s+|buka\s+)?whatsapp(?:\s+(?:terus|trus|lalu|and|then)\s+(?:send\s+message|message|chat))?(?:\s+(?:ke|to))?\s+/i,
+  // "WhatsApp Reja Agung", "WA Reja Agung", "Open WhatsApp terus message Reja Agung"
+  /^(?:coba\s+|tolong\s+|please\s+)?(?:open\s+|buka\s+)?(?:whatsapp|wa)(?:\s+(?:terus|trus|lalu|and|then)\s+(?:send\s+message|message|chat))?(?:\s+(?:ke|to))?\s+/i,
   // "Chat Reja Agung", "Chat ke Reja Agung"
   /^(?:coba\s+|tolong\s+|please\s+)?chat(?:\s+(?:ke|to))?\s+/i,
   // "WA-in Dimas", "Wain Dimas"
   /^(?:coba\s+|tolong\s+|please\s+)?wa-?in(?:\s+(?:ke|to))?\s+/i,
-  // "Kirim WA ke Reja Agung", "Kirim pesan ke Reja Agung", "Kirim chat ke Reja Agung"
-  /^(?:coba\s+|tolong\s+|please\s+)?kirim\s+(?:wa|pesan|chat)(?:\s+(?:ke|to))?\s+/i,
+  // "Kirim WA ke Reja Agung", "Kirim WhatsApp ke Reja Agung", "Kirim pesan ke Reja Agung", "Kirim chat ke Reja Agung"
+  /^(?:coba\s+|tolong\s+|please\s+)?kirim\s+(?:whatsapp|wa|pesan|chat)(?:\s+(?:ke|to))?\s+/i,
   // "Message John", "Text John"
   /^(?:coba\s+|tolong\s+|please\s+)?(?:message|text)(?:\s+(?:ke|to))?\s+/i,
 ];
@@ -137,12 +146,15 @@ export function parseCommand(transcript: string): CommandParseResult {
       };
     }
 
+    const isDynamic = DYNAMIC_RESEARCH_REGEX.test(rawPayload);
+
     // Full valid message intent
     const primaryIntent: StructuredActionIntent = {
       intent: 'send_whatsapp_message',
       recipient: recipientRaw,
       message,
       rawMarker: bestMarkerMatch.text,
+      ...(isDynamic ? { isDynamicGeneration: true } : {}),
     };
 
     validation = validateWhatsAppIntent(primaryIntent);
@@ -163,7 +175,35 @@ export function parseCommand(transcript: string): CommandParseResult {
   }
 
   // Case B: No message marker present (e.g. "WhatsApp Reja Agung" or "Chat Dimas")
-  const recipient = cleanRecipientName(remainingAfterPrefix);
+  let recipient = cleanRecipientName(remainingAfterPrefix);
+  let leftoverMessage = '';
+
+  // Check if remaining string contains implicit conversational splitters
+  const splitMatch = recipient.match(/^([A-Za-z0-9_.\s]{2,30}?)\s+(?:tolong|jangan|nanti|besok|lagi|udah|sudah|bisa|mau|kalo|kalau|buat|untuk)\s+(.*)$/i);
+  if (splitMatch) {
+    recipient = cleanRecipientName(splitMatch[1]);
+    leftoverMessage = splitMatch[2].trim();
+  }
+
+  if (leftoverMessage) {
+    const isDynamic = DYNAMIC_RESEARCH_REGEX.test(leftoverMessage);
+    const primaryIntent: StructuredActionIntent = {
+      intent: 'send_whatsapp_message',
+      recipient,
+      message: leftoverMessage,
+      rawMarker: 'implicit',
+      ...(isDynamic ? { isDynamicGeneration: true } : {}),
+    };
+    const validation = validateWhatsAppIntent(primaryIntent);
+    return {
+      rawTranscript,
+      normalizedTranscript: trimmed,
+      actions: [primaryIntent],
+      isStructured: true,
+      primaryIntent,
+      validation,
+    };
+  }
 
   const primaryIntent: StructuredActionIntent = {
     intent: 'open_whatsapp_chat',

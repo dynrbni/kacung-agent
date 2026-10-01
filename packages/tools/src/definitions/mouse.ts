@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@lafly/types';
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@lofly/types';
 import { toolSafety } from '../safety/policy.js';
 
 function runSwiftSnippet(code: string): Promise<string> {
@@ -412,7 +412,6 @@ export const dragTool: ToolDefinition<DragParams, { startX: number; startY: numb
     const swiftCode = `
 import CoreGraphics
 import Foundation
-import { toolSafety } from '../safety/policy.js';
 
 let startPoint = CGPoint(x: ${startX}, y: ${startY})
 let endPoint = CGPoint(x: ${endX}, y: ${endY})

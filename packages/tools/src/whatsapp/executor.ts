@@ -1,7 +1,7 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
-import type { Logger, WhatsAppContact, WhatsAppExecutor, WhatsAppMessageResult } from '@lafly/types';
+import type { Logger, WhatsAppContact, WhatsAppExecutor, WhatsAppMessageResult } from '@lofly/types';
 
 const execFileAsync = promisify(execFile);
 
@@ -44,8 +44,28 @@ export class LiveWhatsAppExecutor implements WhatsAppExecutor {
   public async openWhatsApp(): Promise<{ target: 'app' | 'web'; message: string }> {
     const installed = await this.isWhatsAppInstalled();
     if (installed) {
-      this.logger?.info('Opening WhatsApp Desktop');
-      await execFileAsync('open', ['-a', 'WhatsApp']);
+      this.logger?.info('Ensuring WhatsApp Desktop is open and frontmost with active window');
+      // macOS AppleScript to reopen and activate, ensuring window is rendered even if previously closed/hidden
+      const script = `
+        tell application "WhatsApp"
+          reopen
+          activate
+        end tell
+        tell application "System Events"
+          repeat with i from 1 to 25
+            if (count of (windows of process "WhatsApp")) > 0 then exit repeat
+            delay 0.2
+          end repeat
+        end tell
+      `;
+      try {
+        await execFileAsync('osascript', ['-e', script]);
+      } catch (err) {
+        // Fallback open
+        await execFileAsync('open', ['-a', 'WhatsApp']);
+      }
+      // Give Catalyst UI 600ms to paint
+      await new Promise((r) => setTimeout(r, 600));
       return { target: 'app', message: 'Aplikasi WhatsApp Desktop berhasil dibuka.' };
     } else {
       this.logger?.info('WhatsApp Desktop not found, opening WhatsApp Web in browser');
@@ -78,34 +98,126 @@ export class LiveWhatsAppExecutor implements WhatsAppExecutor {
   }
 
   /**
-   * Searches for a contact in WhatsApp by bringing WhatsApp to front and pressing shortcut (Cmd+F or Cmd+K).
+   * Searches for a contact in WhatsApp by bringing WhatsApp to front and pressing shortcut or clicking search box.
    */
   public async searchContact(contactName: string): Promise<{ success: boolean; message: string }> {
     this.logger?.info(`Searching WhatsApp contact: ${contactName}`);
     await this.openWhatsApp();
-    await new Promise((r) => setTimeout(r, 600));
 
-    // Try Cmd+F or Cmd+K to focus search bar
+    const cleanTarget = contactName.toLowerCase().trim();
+
+    // 1. Check if contact is ALREADY active in the chat header or visible in the list via Vision OCR
+    try {
+      const { locateOnScreen } = await import('../vision/ocr.js');
+      const vision = await locateOnScreen('WhatsApp', contactName);
+
+      // Check A: Conversation is already open and visible in header
+      const headerMatch = vision.texts.find(
+        (t) => t.text.toLowerCase().includes(cleanTarget) && t.y < 120 && t.x > 350
+      );
+      if (headerMatch) {
+        this.logger?.info(`Vision detected chat with "${contactName}" already open in header.`);
+        return { success: true, message: `Chat "${contactName}" sudah aktif di layar.` };
+      }
+
+      // Check B: Contact is directly visible in recent list
+      const directMatch = vision.texts.find(
+        (t) => t.text.toLowerCase().includes(cleanTarget) && t.x < 420 && t.y > 100
+      );
+      if (directMatch) {
+        this.logger?.info(`Vision found contact "${contactName}" in list at (${directMatch.centerX}, ${directMatch.centerY})`);
+        const clickScript = `
+          import CoreGraphics
+          import Foundation
+          let point = CGPoint(x: ${directMatch.centerX}, y: ${directMatch.centerY})
+          let down = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)
+          down?.post(tap: .cghidEventTap)
+          usleep(40000)
+          let up = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)
+          up?.post(tap: .cghidEventTap)
+        `;
+        await execFileAsync('swift', ['-e', clickScript]);
+        await new Promise((r) => setTimeout(r, 400));
+        return { success: true, message: `Kontak "${contactName}" ditemukan dan dibuka via Vision.` };
+      }
+    } catch (e) {
+      this.logger?.warn(`Vision pre-check error: ${e}`);
+    }
+
+    // 2. Not directly visible: Find and click Search box using Vision OCR
+    let searchX = 117;
+    let searchY = 100;
+    try {
+      const { locateOnScreen } = await import('../vision/ocr.js');
+      const searchVision = await locateOnScreen('WhatsApp', 'Search');
+      const searchItem = searchVision.texts.find((t) => t.text.toLowerCase().includes('search'));
+      if (searchItem) {
+        searchX = Math.round(searchItem.centerX);
+        searchY = Math.round(searchItem.centerY);
+      } else if (searchVision.window) {
+        searchX = Math.round(searchVision.window.x + 120);
+        searchY = Math.round(searchVision.window.y + 70);
+      }
+    } catch {}
+
     const escaped = contactName.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    const script = `
+    const searchScript = `
+      import CoreGraphics
+      import Foundation
+
+      let point = CGPoint(x: ${searchX}, y: ${searchY})
+      let down = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)
+      down?.post(tap: .cghidEventTap)
+      usleep(40000)
+      let up = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)
+      up?.post(tap: .cghidEventTap)
+    `;
+    try {
+      await execFileAsync('swift', ['-e', searchScript]);
+    } catch {}
+
+    await new Promise((r) => setTimeout(r, 250));
+
+    // Type recipient contact name into search field
+    const typeScript = `
       tell application "System Events"
         tell process "WhatsApp"
           set frontmost to true
-          keystroke "f" using command down
-          delay 0.3
           keystroke "${escaped}"
-          delay 0.5
-          key code 36 -- Return
+          delay 0.6
+          key code 125 -- Down arrow to highlight first search match
+          delay 0.2
+          key code 36  -- Return to select
         end tell
       end tell
     `;
+    await execFileAsync('osascript', ['-e', typeScript]);
+    await new Promise((r) => setTimeout(r, 400));
+
+    // 3. Post-search verification: click search match if visible
     try {
-      await execFileAsync('osascript', ['-e', script]);
-      return { success: true, message: `Mencari kontak "${contactName}" di WhatsApp.` };
-    } catch (err) {
-      this.logger?.warn(`WhatsApp contact search script failed: ${err}`);
-      return { success: true, message: `Membuka WhatsApp untuk kontak "${contactName}".` };
-    }
+      const { locateOnScreen } = await import('../vision/ocr.js');
+      const postVision = await locateOnScreen('WhatsApp', contactName);
+      const postMatch = postVision.texts.find(
+        (t) => t.text.toLowerCase().includes(cleanTarget) && t.x < 420 && t.y > 100
+      );
+      if (postMatch) {
+        const clickResultScript = `
+          import CoreGraphics
+          import Foundation
+          let point = CGPoint(x: ${postMatch.centerX}, y: ${postMatch.centerY})
+          let down = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)
+          down?.post(tap: .cghidEventTap)
+          usleep(40000)
+          let up = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)
+          up?.post(tap: .cghidEventTap)
+        `;
+        await execFileAsync('swift', ['-e', clickResultScript]);
+        await new Promise((r) => setTimeout(r, 300));
+      }
+    } catch {}
+
+    return { success: true, message: `Mencari kontak "${contactName}" di WhatsApp via Vision.` };
   }
 
   /**
@@ -133,32 +245,60 @@ export class LiveWhatsAppExecutor implements WhatsAppExecutor {
 
     // 1. Ensure WhatsApp Desktop or Web is open
     await this.openWhatsApp();
-    await new Promise((r) => setTimeout(r, 400));
 
     // 2. Search for and navigate to the recipient's chat conversation
     const cleanContact = contactName.trim();
     if (cleanContact) {
       await this.searchContact(cleanContact);
-      // Wait for conversation to load and input field to gain focus
       await new Promise((r) => setTimeout(r, 500));
     }
 
-    // 3. Type text into focused message field and hit Return
-    const escaped = text.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    const script = `
+    // 3. Locate or focus the message input field at the bottom right
+    // Use window geometry to click in the message input field to guarantee focus
+    let inputX = 600;
+    let inputY = 920;
+    try {
+      const { locateOnScreen } = await import('../vision/ocr.js');
+      const winVision = await locateOnScreen('WhatsApp', '');
+      if (winVision.window) {
+        inputX = Math.round(winVision.window.x + 550);
+        inputY = Math.round(winVision.window.y + winVision.window.height - 35);
+      }
+    } catch {}
+
+    const focusScript = `
+      import CoreGraphics
+      import Foundation
+
+      let point = CGPoint(x: ${inputX}, y: ${inputY})
+      let down = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)
+      down?.post(tap: .cghidEventTap)
+      usleep(30000)
+      let up = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)
+      up?.post(tap: .cghidEventTap)
+    `;
+    try {
+      await execFileAsync('swift', ['-e', focusScript]);
+    } catch {}
+
+    await new Promise((r) => setTimeout(r, 200));
+
+    // 4. Paste message via clipboard and send with Return (preserves emojis and avoids dropped characters)
+    const escapedText = text.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const sendScript = `
+      set the clipboard to "${escapedText}"
       tell application "System Events"
         tell process "WhatsApp"
           set frontmost to true
-          delay 0.2
-          keystroke "${escaped}"
-          delay 0.2
+          keystroke "v" using command down
+          delay 0.3
           key code 36 -- Return to send
         end tell
       end tell
     `;
 
     try {
-      await execFileAsync('osascript', ['-e', script]);
+      await execFileAsync('osascript', ['-e', sendScript]);
       return {
         recipient: contactName,
         text,

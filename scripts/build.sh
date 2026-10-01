@@ -3,18 +3,22 @@ set -e
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-echo "=== Building Lafly TypeScript Monorepo ==="
+echo "=== Building Lofly TypeScript Monorepo ==="
 pnpm build
 
 echo "=== Building Native macOS SwiftUI App with Embedded Info.plist ==="
 swift build --package-path apps/macos \
     -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker "$ROOT_DIR/apps/macos/Info.plist"
 
-echo "=== Packaging & Signing Lafly.app Bundle ==="
-mkdir -p apps/macos/Lafly.app/Contents/MacOS
-cp apps/macos/Info.plist apps/macos/Lafly.app/Contents/Info.plist
-cp apps/macos/.build/arm64-apple-macosx/debug/Lafly apps/macos/Lafly.app/Contents/MacOS/Lafly
-chmod +x apps/macos/Lafly.app/Contents/MacOS/Lafly
-codesign --force --deep --sign - apps/macos/Lafly.app
+echo "=== Packaging & Signing Lofly.app Bundle ==="
+mkdir -p apps/macos/Lofly.app/Contents/MacOS
+mkdir -p apps/macos/Lofly.app/Contents/Resources
+cp apps/macos/Info.plist apps/macos/Lofly.app/Contents/Info.plist
+if [ -f "apps/macos/AppIcon.icns" ]; then
+    cp apps/macos/AppIcon.icns apps/macos/Lofly.app/Contents/Resources/AppIcon.icns
+fi
+cp apps/macos/.build/arm64-apple-macosx/debug/Lofly apps/macos/Lofly.app/Contents/MacOS/Lofly
+chmod +x apps/macos/Lofly.app/Contents/MacOS/Lofly
+codesign --force --deep --sign - apps/macos/Lofly.app
 
-echo "=== All Lafly components built, packaged and signed successfully! ==="
+echo "=== All Lofly components built, packaged and signed successfully! ==="

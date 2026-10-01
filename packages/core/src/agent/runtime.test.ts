@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { AssistantEvent } from '@lafly/types';
+import type { AssistantEvent } from '@lofly/types';
 import { AgentRuntime } from './runtime.js';
 import { MockLLMProvider } from '../providers/llm/mock.js';
 import { MockTTSProvider } from '../providers/tts/mock.js';
-import { ToolExecutor } from '@lafly/tools';
+import { ToolExecutor } from '@lofly/tools';
 
 describe('AgentRuntime', () => {
   it('handles direct conversational requests and transitions through states', async () => {
@@ -113,7 +113,7 @@ describe('AgentRuntime', () => {
           {
             id: 'call_step2',
             name: 'write_file',
-            parameters: { path: '/tmp/lafly-step.txt', content: 'done' },
+            parameters: { path: '/tmp/lofly-step.txt', content: 'done' },
           },
         ],
       },

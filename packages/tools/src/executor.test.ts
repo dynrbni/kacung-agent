@@ -3,7 +3,7 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import { ToolExecutor } from './executor.js';
-import type { ExecutionPolicy } from '@lafly/types';
+import type { ExecutionPolicy } from '@lofly/types';
 
 /**
  * Opt-in live policy for the three cases below that genuinely need real
@@ -16,7 +16,7 @@ const LIVE: ExecutionPolicy = {
   mode: 'live',
   safeTestMode: false,
   liveSideEffects: true,
-  sandboxRoot: path.join(os.tmpdir(), 'LaflySandbox'),
+  sandboxRoot: path.join(os.tmpdir(), 'LoflySandbox'),
 };
 
 describe('ToolExecutor', () => {
@@ -64,14 +64,14 @@ describe('ToolExecutor', () => {
       policy: LIVE,
     });
 
-    const result = await executor.execute('run_command', { command: 'mkdir /tmp/lafly-test-denied' });
+    const result = await executor.execute('run_command', { command: 'mkdir /tmp/lofly-test-denied' });
     expect(confirmMock).toHaveBeenCalled();
     expect(result.result.success).toBe(false);
     expect(result.result.error).toContain('User denied permission');
   });
 
   it('can write and read files safely', async () => {
-    const testFile = path.join(os.tmpdir(), `lafly-test-${Date.now()}.txt`);
+    const testFile = path.join(os.tmpdir(), `lofly-test-${Date.now()}.txt`);
     const executor = new ToolExecutor({
       confirmSensitive: false, // Bypass confirmation in automated test
       policy: LIVE,
@@ -79,14 +79,14 @@ describe('ToolExecutor', () => {
 
     const writeRes = await executor.execute('write_file', {
       path: testFile,
-      content: 'Halo Lafly!',
+      content: 'Halo Lofly!',
     });
     expect(writeRes.result.success).toBe(true);
 
     const readRes = await executor.execute('read_file', { path: testFile });
     expect(readRes.result.success).toBe(true);
     const readData = readRes.result.data as { content: string };
-    expect(readData.content).toBe('Halo Lafly!');
+    expect(readData.content).toBe('Halo Lofly!');
 
     // Cleanup
     if (fs.existsSync(testFile)) {
@@ -95,7 +95,7 @@ describe('ToolExecutor', () => {
   });
 
   it('confines filesystem writes to the sandbox root in sandbox mode', async () => {
-    const sandboxRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'lafly-sandbox-'));
+    const sandboxRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'lofly-sandbox-'));
     const executor = new ToolExecutor({
       confirmSensitive: false,
       policy: { mode: 'sandbox', safeTestMode: true, liveSideEffects: false, sandboxRoot },

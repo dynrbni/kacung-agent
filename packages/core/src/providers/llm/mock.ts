@@ -3,7 +3,7 @@ import type {
   LLMCompletionOptions,
   LLMCompletionResponse,
   ToolCallRequest,
-} from '@lafly/types';
+} from '@lofly/types';
 
 export interface MockLLMResponseStep {
   content?: string | null;
@@ -46,7 +46,7 @@ export class MockLLMProvider implements LLMProvider {
 
     if (lastUserMessage.includes('jam') || lastUserMessage.includes('time')) {
       return {
-        content: `Sekarang jam ${new Date().toLocaleTimeString('id-ID')}, bos. Ada lagi yang bisa Lafly bantu?`,
+        content: `Sekarang jam ${new Date().toLocaleTimeString('id-ID')}, bos. Ada lagi yang bisa Lofly bantu?`,
       };
     }
 
@@ -65,7 +65,7 @@ export class MockLLMProvider implements LLMProvider {
 
     if (lastUserMessage.includes('screenshot') || lastUserMessage.includes('layar')) {
       return {
-        content: 'Siap bos, Lafly ambilkan screenshot sekarang.',
+        content: 'Siap bos, Lofly ambilkan screenshot sekarang.',
         toolCalls: [
           {
             id: `call_screen_${Date.now()}`,
@@ -77,7 +77,7 @@ export class MockLLMProvider implements LLMProvider {
     }
 
     return {
-      content: 'Halo bos! Lafly siap membantu tugas apa saja di Mac Anda.',
+      content: 'Halo bos! Lofly siap membantu tugas apa saja di Mac Anda.',
     };
   }
 }

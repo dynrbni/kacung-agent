@@ -3,11 +3,11 @@ import { readFileSync } from 'fs';
 import path from 'path';
 
 const APP_STATE = readFileSync(
-  path.join(process.cwd(), 'apps/macos/Sources/LaflyApp/AppState.swift'),
+  path.join(process.cwd(), 'apps/macos/Sources/LoflyApp/AppState.swift'),
   'utf8'
 );
 const HOTKEY = readFileSync(
-  path.join(process.cwd(), 'apps/macos/Sources/LaflyApp/Services/HotkeyManager.swift'),
+  path.join(process.cwd(), 'apps/macos/Sources/LoflyApp/Services/HotkeyManager.swift'),
   'utf8'
 );
 
@@ -79,7 +79,7 @@ describe('Push to talk — a tap must not summon the notch', () => {
   it('keeps a hands-free path that does not require holding', () => {
     expect(APP_STATE).toContain('public func startHandsFreeListening()');
     const menu = readFileSync(
-      path.join(process.cwd(), 'apps/macos/Sources/LaflyApp/Views/MenuBarView.swift'),
+      path.join(process.cwd(), 'apps/macos/Sources/LoflyApp/Views/MenuBarView.swift'),
       'utf8'
     );
     expect(menu).toContain('startHandsFreeListening()');

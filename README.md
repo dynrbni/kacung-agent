@@ -1,8 +1,8 @@
-# Lafly — Native macOS AI Agent Voice Assistant
+# Lofly — Native macOS AI Agent Voice Assistant
 
 <div align="center">
   <h3>Autonomous Voice-First AI Agent for macOS</h3>
-  <p>Wake Phrase: <b>"Woi Lafly"</b> • Development Fallback Hotkey: <b>⌥ + Space (Option + Space)</b></p>
+  <p>Wake Phrase: <b>"Woi Lofly"</b> • Development Fallback Hotkey: <b>⌥ + Space (Option + Space)</b></p>
   <p>Natively supports <b>Indonesian</b>, <b>English</b>, and <b>Indonesian-English code switching</b>.</p>
 </div>
 
@@ -10,7 +10,7 @@
 
 ## 1. Overview
 
-**Lafly** is a native macOS AI assistant inspired by Siri, engineered from the ground up as an **autonomous agent** capable of understanding voice commands, operating macOS, navigating apps, controlling Terminal with safety guarantees, doing web research, and executing multi-step workflows.
+**Lofly** is a native macOS AI assistant inspired by Siri, engineered from the ground up as an **autonomous agent** capable of understanding voice commands, operating macOS, navigating apps, controlling Terminal with safety guarantees, doing web research, and executing multi-step workflows.
 
 ### Core Philosophy:
 * **The LLM does NOT control the computer directly.** The LLM only decides what actions are needed and with what parameters.
@@ -59,11 +59,11 @@
 ## 3. Project Structure
 
 ```text
-lafly/
+lofly/
 ├── apps/
 │   ├── macos/                     # Native macOS Swift/SwiftUI application
 │   │   ├── Package.swift          # SPM package configuration (macOS 14+)
-│   │   └── Sources/LaflyApp/     # Overlay, MenuBar, Audio, Hotkey, Client
+│   │   └── Sources/LoflyApp/     # Overlay, MenuBar, Audio, Hotkey, Client
 │   └── agent/                     # Local Node.js agent runtime daemon
 │       └── src/                   # HTTP REST server, WebSocket broadcaster
 │
@@ -121,7 +121,7 @@ added tool can never inherit a permissive default by accident.
 
 ## 6. Safe Testing & Side-Effect Protection
 
-Lafly can send WhatsApp messages, delete files, type into your frontmost
+Lofly can send WhatsApp messages, delete files, type into your frontmost
 application, and run shell commands. Development and test runs must never do
 that by accident, so side effects are gated **below the LLM** — a system prompt
 or a model response cannot talk its way past the executor.
@@ -131,7 +131,7 @@ or a model response cannot talk its way past the executor.
 | Mode | What happens |
 | :--- | :--- |
 | `dry_run` (default) | Tools are simulated. Arguments are validated and echoed back, but nothing external happens. |
-| `sandbox` | Sandbox-capable tools execute against `LAFLY_SANDBOX_ROOT` instead of your real files. Destructive tools stay simulated. |
+| `sandbox` | Sandbox-capable tools execute against `LOFLY_SANDBOX_ROOT` instead of your real files. Destructive tools stay simulated. |
 | `live` | Real side effects. Requires an explicit, deliberate opt-in. |
 
 ```bash
@@ -143,11 +143,11 @@ pnpm dev:live      # deliberate live execution
 ### Configuration
 
 ```env
-LAFLY_ENV=development
+LOFLY_ENV=development
 SAFE_TEST_MODE=true
 LIVE_SIDE_EFFECTS=false
-LAFLY_EXECUTION_MODE=dry_run
-LAFLY_SANDBOX_ROOT=~/LaflySandbox
+LOFLY_EXECUTION_MODE=dry_run
+LOFLY_SANDBOX_ROOT=~/LoflySandbox
 ```
 
 ### Rules
@@ -169,6 +169,10 @@ LAFLY_SANDBOX_ROOT=~/LaflySandbox
 
 * **Tests are pinned.** `tests/setup.ts` forces dry-run mode before any test
   module loads, so a tool that forgot to check the policy still cannot execute.
+* **Pre-rebrand keys still work.** `LOFLY_ENV`, `LOFLY_EXECUTION_MODE`, and
+  `LOFLY_SANDBOX_ROOT` fall back to their old `LAFLY_*` names, so an existing
+  `.env` keeps its protection instead of silently reverting to the permissive
+  default. `LOFLY_*` wins when both are set.
 
 ### Trying a command without sending anything
 
@@ -195,8 +199,8 @@ production. Only the delivery is skipped.
 
 ### Installation:
 ```bash
-git clone git@github.com:dynrbni/lafly.git
-cd lafly
+git clone git@github.com:dynrbni/lofly.git
+cd lofly
 pnpm install
 ```
 
@@ -208,7 +212,7 @@ cp .env.example .env
 
 #### 9Router Setup & Configuration:
 
-Lafly integrates with local **9Router** (`http://localhost:20128/v1`) using an OpenAI-compatible interface and defaults to `ag/gemini-3.8-flash-high`.
+Lofly integrates with local **9Router** (`http://localhost:20128/v1`) using an OpenAI-compatible interface and defaults to `ag/gemini-3.8-flash-high`.
 
 1. **Start 9Router**: Ensure your local 9Router server is running at `http://localhost:20128/v1`.
 2. **Configure the provider/model in 9Router**: Add your upstream provider (e.g., Gemini) and configure model `ag/gemini-3.8-flash-high`.
@@ -219,7 +223,7 @@ Lafly integrates with local **9Router** (`http://localhost:20128/v1`) using an O
    NINEROUTER_API_KEY=your_actual_key_here
    NINEROUTER_MODEL=ag/gemini-3.8-flash-high
    ```
-5. **Start Lafly**:
+5. **Start Lofly**:
    ```bash
    ./scripts/start-agent.sh
    ./scripts/run-macos.sh
@@ -256,7 +260,7 @@ pnpm test
 ./scripts/run-macos.sh
 ```
 
-Activate Lafly anytime with the development hotkey: **`Option + Space`** or via the menu bar item.
+Activate Lofly anytime with the development hotkey: **`Option + Space`** or via the menu bar item.
 
 ---
 
@@ -264,7 +268,7 @@ Activate Lafly anytime with the development hotkey: **`Option + Space`** or via 
 
 | Scenario | Input | Expected Output | Status |
 | :--- | :--- | :--- | :--- |
-| **Test 1** | `"Woi Lafly"` / Hotkey | Lafly activates and enters `listening` state. | Verified |
+| **Test 1** | `"Woi Lofly"` / Hotkey | Lofly activates and enters `listening` state. | Verified |
 | **Test 2** | `"What time is it?"` | Answers the current time with voice (TTS). | Verified |
 | **Test 3** | `"Buka Spotify."` | Invokes `open_app(Spotify)`. | Verified |
 | **Test 4** | `"Buka Safari."` | Invokes `open_app(Safari)`. | Verified |

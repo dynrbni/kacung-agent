@@ -5,7 +5,7 @@ import type {
   ToolCallRequest,
   ChatMessage,
   ToolDefinition,
-} from '@lafly/types';
+} from '@lofly/types';
 
 export interface GeminiLLMOptions {
   apiKey: string;

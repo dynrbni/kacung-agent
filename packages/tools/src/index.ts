@@ -20,3 +20,4 @@ export * from './definitions/word.js';
 export * from './whatsapp/controller.js';
 export * from './whatsapp/executor.js';
 export * from './computer/engine.js';
+export * from './vision/ocr.js';

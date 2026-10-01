@@ -1,8 +1,8 @@
-import type { SpeechToTextProvider, STTOptions, STTResult } from '@lafly/types';
+import type { SpeechToTextProvider, STTOptions, STTResult } from '@lofly/types';
 
 export class MockSTTProvider implements SpeechToTextProvider {
   public name = 'mock-stt';
-  private cannedTranscript = 'Woi Lafly, buka Spotify';
+  private cannedTranscript = 'Woi Lofly, buka Spotify';
 
   constructor(initialTranscript?: string) {
     if (initialTranscript) {

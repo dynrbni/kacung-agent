@@ -4,7 +4,7 @@ import {
   AgentRuntime,
   MockLLMProvider,
   MockTTSProvider,
-} from '@lafly/core';
+} from '@lofly/core';
 import {
   ToolExecutor,
   ToolRegistry,
@@ -16,21 +16,21 @@ import {
   MockWhatsAppExecutor,
   LiveWhatsAppExecutor,
   WhatsAppController,
-} from '@lafly/tools';
-import type { ExecutionPolicy } from '@lafly/types';
+} from '@lofly/tools';
+import type { ExecutionPolicy } from '@lofly/types';
 
 const DRY_RUN: ExecutionPolicy = {
   mode: 'dry_run',
   safeTestMode: true,
   liveSideEffects: false,
-  sandboxRoot: path.join('/tmp', 'LaflySandbox'),
+  sandboxRoot: path.join('/tmp', 'LoflySandbox'),
 };
 
 const LIVE: ExecutionPolicy = {
   mode: 'live',
   safeTestMode: false,
   liveSideEffects: true,
-  sandboxRoot: path.join('/tmp', 'LaflySandbox'),
+  sandboxRoot: path.join('/tmp', 'LoflySandbox'),
 };
 
 function newExecutor(policy: ExecutionPolicy = DRY_RUN): ToolExecutor {

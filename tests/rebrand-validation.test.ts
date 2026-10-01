@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 
 const ROOT = process.cwd();
-const PREVIOUS_BRAND = /kacung/i;
+const PREVIOUS_BRAND = /lafly/i;
 
 /**
  * Directories whose contents are generated, vendored, or binary. A stale match
@@ -12,12 +12,24 @@ const PREVIOUS_BRAND = /kacung/i;
  */
 const EXCLUDED_DIRS = ['.git', 'node_modules', 'dist', '.build', '.pnpm-store'];
 
-const ALLOWED_HISTORICAL = [
-  // The migration record itself documents the old identifiers on purpose.
-  'scripts/migration/kacung-to-lafly.mjs',
+/**
+ * Files that may still contain the previous brand, each with the reason it is
+ * justified. Anything not listed here is an accidental reference.
+ */
+const ALLOWED_WITH_REASON: Record<string, string> = {
+  // The migration records themselves document the old identifiers on purpose.
+  'scripts/migration/kacung-to-lafly.mjs': 'one-off rename record kept for provenance',
+  'scripts/migration/lafly-to-lofly.mjs': 'one-off rename record kept for provenance',
   // This file necessarily names the previous brand in order to detect it.
-  'tests/rebrand-validation.test.ts',
-];
+  'tests/rebrand-validation.test.ts': 'the stale-brand detector itself',
+  // Documents the LOFLY_* -> LAFLY_* compatibility fallback for developers.
+  'README.md': 'documents the legacy environment-variable fallback',
+  // Reads the legacy names so an existing .env keeps its protection instead of
+  // silently reverting to the permissive default.
+  'packages/tools/src/safety/policy.ts': 'legacy LOFLY_* alias resolution',
+};
+
+const ALLOWED_HISTORICAL = Object.keys(ALLOWED_WITH_REASON);
 
 function walk(dir: string, acc: string[] = []): string[] {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -71,26 +83,26 @@ describe('Rebrand validation', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('uses the Lafly package scope consistently', () => {
+  it('uses the Lofly package scope consistently', () => {
     const root = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-    expect(root.name).toBe('lafly-monorepo');
-    expect(Object.keys(root.devDependencies).filter((d) => d.startsWith('@lafly/')).length).toBeGreaterThan(0);
-    expect(root.devDependencies['@kacung/config']).toBeUndefined();
+    expect(root.name).toBe('lofly-monorepo');
+    expect(Object.keys(root.devDependencies).filter((d) => d.startsWith('@lofly/')).length).toBeGreaterThan(0);
+    expect(root.devDependencies['@lafly/config']).toBeUndefined();
 
     const agent = JSON.parse(fs.readFileSync(path.join(ROOT, 'apps/agent/package.json'), 'utf8'));
-    expect(agent.name).toBe('@lafly/agent');
+    expect(agent.name).toBe('@lofly/agent');
   });
 
-  it('ships the macOS app under the Lafly identity', () => {
+  it('ships the macOS app under the Lofly identity', () => {
     const plist = fs.readFileSync(path.join(ROOT, 'apps/macos/Info.plist'), 'utf8');
-    expect(plist).toContain('<string>com.dynrbni.lafly</string>');
-    expect(plist).toContain('<key>CFBundleDisplayName</key>\n    <string>Lafly</string>');
+    expect(plist).toContain('<string>com.dynrbni.lofly</string>');
+    expect(plist).toContain('<key>CFBundleDisplayName</key>\n    <string>Lofly</string>');
     expect(plist).not.toMatch(PREVIOUS_BRAND);
 
     const pkg = fs.readFileSync(path.join(ROOT, 'apps/macos/Package.swift'), 'utf8');
-    expect(pkg).toContain('name: "Lafly"');
-    expect(pkg).toContain('path: "Sources/LaflyApp"');
-    expect(fs.existsSync(path.join(ROOT, 'apps/macos/Sources/LaflyApp'))).toBe(true);
+    expect(pkg).toContain('name: "Lofly"');
+    expect(pkg).toContain('path: "Sources/LoflyApp"');
+    expect(fs.existsSync(path.join(ROOT, 'apps/macos/Sources/LoflyApp'))).toBe(true);
   });
 
   it('keeps the assistant persona and completion phrase intact', () => {
@@ -104,9 +116,25 @@ describe('Rebrand validation', () => {
     const envExample = fs.readFileSync(path.join(ROOT, '.env.example'), 'utf8');
     expect(envExample).toContain('SAFE_TEST_MODE=true');
     expect(envExample).toContain('LIVE_SIDE_EFFECTS=false');
+    expect(envExample).toContain('LOFLY_EXECUTION_MODE=dry_run');
 
     const rootPkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
     expect(rootPkg.scripts.test).toContain('SAFE_TEST_MODE=true');
     expect(rootPkg.scripts.test).toContain('LIVE_SIDE_EFFECTS=false');
+  });
+
+  it('defaults the assistant identity to Lofly', () => {
+    const envExample = fs.readFileSync(path.join(ROOT, '.env.example'), 'utf8');
+    expect(envExample).toContain('ASSISTANT_NAME=Lofly');
+    expect(envExample).toContain('WAKE_PHRASE="Woi Lofly"');
+  });
+
+  it('still reads pre-rebrand LOFLY_* aliases without weakening the policy', () => {
+    // A stale .env must keep its protection rather than silently reverting to
+    // the permissive default, so the legacy names remain readable.
+    const policy = fs.readFileSync(path.join(ROOT, 'packages/tools/src/safety/policy.ts'), 'utf8');
+    expect(policy).toContain("env[`LAFLY_${key.slice('LOFLY_'.length)}`]");
+    expect(policy).toContain('LOFLY_SANDBOX_ROOT');
+    expect(policy).toContain('LOFLY_EXECUTION_MODE');
   });
 });

@@ -1,4 +1,4 @@
-import type { ToolResult, ToolSafetyMetadata, ExecutionPolicy } from '@lafly/types';
+import type { ToolResult, ToolSafetyMetadata, ExecutionPolicy } from '@lofly/types';
 import { getToolSafety, executionStatus } from './policy.js';
 
 export interface DryRunOptions {

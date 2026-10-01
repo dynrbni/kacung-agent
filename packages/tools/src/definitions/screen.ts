@@ -3,7 +3,7 @@ import { promisify } from 'util';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@lafly/types';
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@lofly/types';
 import { toolSafety } from '../safety/policy.js';
 
 const execFileAsync = promisify(execFile);
@@ -36,7 +36,7 @@ export const screenshotTool: ToolDefinition<ScreenshotParams, ScreenshotResultDa
   async execute(params: ScreenshotParams, context: ToolExecutionContext): Promise<ToolResult<ScreenshotResultData>> {
     context.logger.info('Capturing macOS screen');
     const timestamp = Date.now();
-    const destDir = path.join(os.tmpdir(), 'lafly-screenshots');
+    const destDir = path.join(os.tmpdir(), 'lofly-screenshots');
 
     try {
       if (!fs.existsSync(destDir)) {
@@ -126,7 +126,7 @@ export const screenshotAppTool: ToolDefinition<ScreenshotAppParams, ScreenshotRe
     }
 
     const timestamp = Date.now();
-    const destDir = path.join(os.tmpdir(), 'lafly-screenshots');
+    const destDir = path.join(os.tmpdir(), 'lofly-screenshots');
     if (!fs.existsSync(destDir)) {
       fs.mkdirSync(destDir, { recursive: true });
     }
@@ -161,3 +161,108 @@ export const screenshotAppTool: ToolDefinition<ScreenshotAppParams, ScreenshotRe
     }
   },
 };
+
+export interface LocateOnScreenParams {
+  appName?: string;
+  query?: string;
+}
+
+export const locateOnScreenTool: ToolDefinition<LocateOnScreenParams, any> = {
+  name: 'locate_on_screen',
+  description: 'Locates text and interactive elements on screen or inside a specific application window using native macOS Vision OCR. Returns screen coordinates (x, y, width, height, centerX, centerY) and confidence.',
+  permissionLevel: 'SAFE',
+  safety: toolSafety('none', { supportsSandbox: true }),
+  parameters: {
+    type: 'object',
+    properties: {
+      appName: {
+        type: 'string',
+        description: 'Optional name of the target application window to scan (e.g. "WhatsApp", "Spotify", "Safari"). If omitted, scans the frontmost window/screen.',
+      },
+      query: {
+        type: 'string',
+        description: 'Optional text or substring to search for (e.g. "Search", "Send", contact name).',
+      },
+    },
+  },
+  async execute(params: LocateOnScreenParams, context: ToolExecutionContext) {
+    const { locateOnScreen } = await import('../vision/ocr.js');
+    context.logger.info(`Locating text on screen for app: ${params?.appName || 'any'}, query: "${params?.query || ''}"`);
+    try {
+      const result = await locateOnScreen(params?.appName, params?.query);
+      return {
+        success: true,
+        data: result,
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        success: false,
+        error: `Failed to locate elements on screen: ${msg}`,
+      };
+    }
+  },
+};
+
+export interface ClickElementByTextParams {
+  text: string;
+  appName?: string;
+}
+
+export const clickElementByTextTool: ToolDefinition<ClickElementByTextParams, { clicked: boolean; x?: number; y?: number }> = {
+  name: 'click_element_by_text',
+  description: 'Finds an element or button on the screen matching the specified text using macOS Vision OCR and simulates a mouse click on it.',
+  permissionLevel: 'SENSITIVE',
+  safety: toolSafety('external', { supportsSandbox: true }),
+  parameters: {
+    type: 'object',
+    properties: {
+      text: {
+        type: 'string',
+        description: 'The visible label, button text, or name to click (e.g. "Search", contact name, "Play").',
+      },
+      appName: {
+        type: 'string',
+        description: 'Optional application name to focus before clicking (e.g. "WhatsApp").',
+      },
+    },
+    required: ['text'],
+  },
+  validate(params: unknown) {
+    if (!params || typeof params !== 'object') {
+      return { valid: false, error: 'Parameters must be an object' };
+    }
+    const p = params as Record<string, unknown>;
+    if (!p.text || typeof p.text !== 'string' || p.text.trim() === '') {
+      return { valid: false, error: 'text is required' };
+    }
+    return { valid: true };
+  },
+  async execute(params: ClickElementByTextParams, context: ToolExecutionContext) {
+    const { clickTextOnScreen } = await import('../vision/ocr.js');
+    const appName = params.appName?.trim() || '';
+    const text = params.text.trim();
+    context.logger.info(`Clicking element by text: "${text}" in ${appName || 'current window'}`);
+
+    try {
+      const res = await clickTextOnScreen(appName, text);
+      if (res.clicked) {
+        return {
+          success: true,
+          data: res,
+        };
+      }
+      return {
+        success: false,
+        error: `Could not find text "${text}" on screen to click.`,
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        success: false,
+        error: `Click element by text failed: ${msg}`,
+      };
+    }
+  },
+};
+

@@ -1,4 +1,4 @@
-import type { WakeWordDetector } from '@lafly/types';
+import type { WakeWordDetector } from '@lofly/types';
 
 /**
  * HotkeyWakeWordDetector

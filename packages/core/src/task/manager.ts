@@ -7,8 +7,8 @@ import type {
   TaskSnapshot,
   TaskStatus,
   TaskStep,
-} from '@lafly/types';
-import { ACTIVE_TASK_STATUSES, TERMINAL_TASK_STATUSES } from '@lafly/types';
+} from '@lofly/types';
+import { ACTIVE_TASK_STATUSES, TERMINAL_TASK_STATUSES } from '@lofly/types';
 
 /**
  * Authoritative task state.
@@ -172,7 +172,7 @@ export class ActivityLog {
   private maxEntries: number;
 
   constructor(options: { filePath?: string; maxEntries?: number } = {}) {
-    const dir = path.join(os.homedir(), '.lafly');
+    const dir = path.join(os.homedir(), '.lofly');
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
@@ -271,6 +271,10 @@ export function humanizeToolName(toolName: string, parameters: Record<string, un
     case 'screenshot':
     case 'screenshot_app':
       return 'Captured screen';
+    case 'locate_on_screen':
+      return `Scanned screen${label}`;
+    case 'click_element_by_text':
+      return `Clicked "${truncate(String(parameters.text || target || ''), 24)}"`;
     case 'send_whatsapp_message':
       return `Sent WhatsApp message${label ? ` to ${truncate(String(target), 24)}` : ''}`;
     case 'open_whatsapp_chat':

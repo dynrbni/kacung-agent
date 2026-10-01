@@ -1,4 +1,4 @@
-import type { Logger, LogLevel } from '@lafly/types';
+import type { Logger, LogLevel } from '@lofly/types';
 
 const LOG_LEVELS: Record<LogLevel, number> = {
   debug: 0,
@@ -45,7 +45,7 @@ export class StructuredLogger implements Logger {
   private level: LogLevel;
   private prefix: string;
 
-  constructor(level: LogLevel = 'info', prefix: string = 'Lafly') {
+  constructor(level: LogLevel = 'info', prefix: string = 'Lofly') {
     this.level = level;
     this.prefix = prefix;
   }

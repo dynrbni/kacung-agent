@@ -1,4 +1,4 @@
-import type { ProcessedTranscript, TranscriptCorrection } from '@lafly/types';
+import type { ProcessedTranscript, TranscriptCorrection } from '@lofly/types';
 import { validateTranscript } from './validator.js';
 
 /**

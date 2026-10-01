@@ -6,9 +6,10 @@ import type {
   ConfirmationResponse,
   LLMProvider,
   TextToSpeechProvider,
-} from '@lafly/types';import { getConfig, type LaflyConfig } from '@lafly/config';
-import type { IntegrationDescriptor, ToolCallRequest, AgentRunResult } from '@lafly/types';
-import { ToolExecutor, getToolSafety } from '@lafly/tools';
+} from '@lofly/types';
+import { getConfig, type LoflyConfig } from '@lofly/config';
+import type { IntegrationDescriptor, ToolCallRequest, AgentRunResult } from '@lofly/types';
+import { ToolExecutor, getToolSafety } from '@lofly/tools';
 import {
   AgentRuntime,
   StructuredLogger,
@@ -26,20 +27,38 @@ import {
   AccountStore,
   describeIntegrations,
   humanizeToolName,
-} from '@lafly/core';
+  capabilityLabel,
+  firstSentence,
+} from '@lofly/core';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
 
-export interface LaflyAppOptions {
-  config?: LaflyConfig;
+/**
+ * A request body that is not valid JSON.
+ *
+ * Thrown while reading the body so the caller gets a 400 — the mistake is the
+ * client's, not the server's — and so the request can never be left without an
+ * answer. Both clients send well-formed JSON, but a hand-rolled request or a
+ * proxy in the middle must not be able to hang a route or trip an unhandled
+ * rejection.
+ */
+class InvalidJsonBodyError extends Error {
+  constructor() {
+    super('Request body is not valid JSON.');
+    this.name = 'InvalidJsonBodyError';
+  }
+}
+
+export interface LoflyAppOptions {
+  config?: LoflyConfig;
   llmProvider?: LLMProvider;
   ttsProvider?: TextToSpeechProvider;
 
   /**
    * Store overrides. Tests inject isolated paths so the suite never reads or
-   * writes the developer's real ~/.lafly data.
+   * writes the developer's real ~/.lofly data.
    */
   conversations?: FileConversationStore;
   memory?: FileMemoryStore;
@@ -49,13 +68,14 @@ export interface LaflyAppOptions {
   account?: AccountStore;
 }
 
-export class LaflyAgentApp {
-  public config: LaflyConfig;
+export class LoflyAgentApp {
+  public config: LoflyConfig;
   public logger: StructuredLogger;
   public runtime: AgentRuntime;
   public executor: ToolExecutor;
   public httpServer: http.Server;
   public wss: WebSocketServer;
+  public llmProvider: LLMProvider;
 
   /** Shared state consumed by both the notch and the desktop app. */
   public conversations: FileConversationStore;
@@ -78,12 +98,13 @@ export class LaflyAgentApp {
     }
   >();
 
-  constructor(options: LaflyAppOptions = {}) {
+  constructor(options: LoflyAppOptions = {}) {
     this.config = options.config || getConfig();
     this.logger = new StructuredLogger(this.config.logging.level, 'AgentServer');
 
     // 1. Configure LLM Provider
     const llmProvider = options.llmProvider || this.resolveLLMProvider();
+    this.llmProvider = llmProvider;
 
     // 2. Configure TTS Provider
     const ttsProvider = options.ttsProvider || this.resolveTTSProvider();
@@ -114,7 +135,26 @@ export class LaflyAgentApp {
     this.account = options.account || new AccountStore();
 
     // 6. Create HTTP & WebSocket Servers
-    this.httpServer = http.createServer((req, res) => this.handleHttpRequest(req, res));
+    // Every request must be answered. The route handlers below return early, so
+    // a rejection that escapes one of them — an unreadable body on a route with
+    // no local try/catch — would otherwise leave the socket open until the
+    // client timed out, with nothing logged but an unhandled rejection.
+    this.httpServer = http.createServer((req, res) => {
+      this.handleHttpRequest(req, res).catch((err) => {
+        const badBody = err instanceof InvalidJsonBodyError;
+        this.logger.warn(
+          `Unanswered request ${req.method} ${req.url}: ${err instanceof Error ? err.message : String(err)}`
+        );
+        if (!res.headersSent) {
+          res.writeHead(badBody ? 400 : 500, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              error: badBody ? 'Request body is not valid JSON.' : 'Internal error.',
+            })
+          );
+        }
+      });
+    });
     this.wss = new WebSocketServer({ server: this.httpServer, path: '/ws' });
 
     this.setupWebSocket();
@@ -452,8 +492,8 @@ export class LaflyAgentApp {
         req.on('end', () => {
           try {
             resolve(body ? JSON.parse(body) : {});
-          } catch (err) {
-            reject(err);
+          } catch {
+            reject(new InvalidJsonBodyError());
           }
         });
         req.on('error', reject);
@@ -465,17 +505,40 @@ export class LaflyAgentApp {
       try {
         const body = await readBody();
         const text = typeof body.text === 'string' ? body.text : '';
-        if (!text.trim()) {
+        const attachments = Array.isArray(body.attachments) ? body.attachments.map(String) : [];
+
+        if (!text.trim() && attachments.length === 0) {
           sendJson(400, { error: 'Missing or empty "text" parameter in query request.' });
           return;
         }
 
-        const { result, taskId } = await this.runTracked(
-          text,
-          `chat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`
+        // Push-to-talk is marked with source "voice": same runtime, but it
+        // never lands in conversation history (see runTracked).
+        const source = body.source === 'voice' ? 'voice' : 'text';
+        const reasoningLevel = (typeof body.reasoningLevel === 'string' && ['low', 'medium', 'high'].includes(body.reasoningLevel))
+          ? (body.reasoningLevel as 'low' | 'medium' | 'high')
+          : undefined;
+
+        let fullQuery = text;
+        if (attachments.length > 0) {
+          const attachmentList = attachments.map((p) => `- ${p}`).join('\n');
+          fullQuery = `${text}\n\n[Lampiran file/gambar:\n${attachmentList}\n(Gunakan tool read_file atau tool yang relevan untuk membaca/memeriksa lampiran ini jika diperlukan)]`.trim();
+        }
+
+        const conversationIdParam = typeof body.conversationId === 'string' && body.conversationId.trim().length > 0
+          ? body.conversationId.trim()
+          : undefined;
+
+        const { result, taskId, conversationId } = await this.runTracked(
+          fullQuery,
+          `chat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          { source, reasoningLevel, attachments, conversationId: conversationIdParam }
         );
-        sendJson(200, { ...result, taskId });
+        sendJson(200, { ...result, taskId, conversationId });
       } catch (err) {
+        // An unreadable body is the caller's mistake: let the outer handler
+        // answer 400 instead of reporting a server failure.
+        if (err instanceof InvalidJsonBodyError) throw err;
         sendJson(500, { error: String(err) });
       }
       return;
@@ -502,6 +565,7 @@ export class LaflyAgentApp {
           sendJson(404, { success: false, error: `Confirmation request "${id}" not found or already resolved.` });
         }
       } catch (err) {
+        if (err instanceof InvalidJsonBodyError) throw err;
         sendJson(500, { error: String(err) });
       }
       return;
@@ -555,8 +619,12 @@ export class LaflyAgentApp {
 
         this.logger.info(`Audio transcribed to: "${transcript}"`);
         // Voice and text share one pipeline, so a spoken command is tracked as
-        // a task and lands in the same conversation history.
-        const { result: agentResult, taskId } = await this.runTracked(transcript, `voice_${Date.now()}`);
+        // a task — but it is voice, so it never lands in chat history.
+        const { result: agentResult, taskId } = await this.runTracked(
+          transcript,
+          `voice_${Date.now()}`,
+          { source: 'voice' }
+        );
         sendJson(200, { ...agentResult, taskId });
       } catch (err) {
         sendJson(500, { error: String(err) });
@@ -606,6 +674,13 @@ export class LaflyAgentApp {
       this.currentConversationId = created.id;
       this.runtime.resetConversation();
       sendJson(200, { success: true, conversation: created });
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/conversations/reset') {
+      this.currentConversationId = null;
+      this.runtime.resetConversation();
+      sendJson(200, { success: true });
       return;
     }
 
@@ -752,6 +827,34 @@ export class LaflyAgentApp {
       return;
     }
 
+    // Skills — what the agent can actually do, read straight from the tool
+    // registry that executes the calls, so the screen can never advertise a
+    // capability that is not wired up. Parameter schemas stay on the server.
+    if (req.method === 'GET' && pathname === '/skills') {
+      const policy = this.executor.getPolicy();
+      const skills = this.executor
+        .getRegistry()
+        .list()
+        .map((tool) => ({
+          id: tool.name,
+          // A capability phrase, not the activity log's past tense: this route
+          // answers "what can Lofly do?", not "what did it just do?".
+          name: capabilityLabel(tool.name),
+          // The first sentence whole, so a row never ends mid-sentence.
+          summary: firstSentence(tool.description),
+          // Full text for the tooltip: shorter than the model's view of it only
+          // by what a person does not need on one line.
+          description: tool.description,
+          permissionLevel: tool.permissionLevel,
+          sideEffect: getToolSafety(tool.safety).sideEffect,
+          // True while the policy simulates real actions. Surfaced so the
+          // screen never presents a dry run as a live capability.
+          simulated: policy.mode !== 'live',
+        }));
+      sendJson(200, { skills, executionMode: policy.mode });
+      return;
+    }
+
     // Settings
     if (req.method === 'GET' && pathname === '/settings') {
       sendJson(200, { settings: this.settings.get() });
@@ -831,26 +934,49 @@ export class LaflyAgentApp {
   }
 
   /**
-   * Runs a query while recording it as a task in the shared conversation.
+   * Runs a query while recording it as a task. Typed input (`source: 'text'`,
+   * the default) is appended to the shared conversation so the sidebar shows
+   * it as chat history. Push-to-talk (`source: 'voice'`) shares the same
+   * runtime, task tracking, and activity log but never lands in conversation
+   * history — voice is transient, history is what the user typed.
    * Used by both POST /query and POST /audio so voice and text share one path.
    */
   private async runTracked(
     text: string,
-    requestId: string
-  ): Promise<{ result: AgentRunResult; conversationId: string; taskId: string }> {
-    if (!this.currentConversationId) {
-      const conversation = await this.conversations.create();
-      this.currentConversationId = conversation.id;
-    }
+    requestId: string,
+    options: {
+      source?: 'voice' | 'text';
+      reasoningLevel?: 'low' | 'medium' | 'high';
+      attachments?: string[];
+      conversationId?: string;
+    } = {}
+  ): Promise<{ result: AgentRunResult; conversationId: string | null; taskId: string }> {
+    const persistToConversation = options.source !== 'voice';
+    let conversationId: string | null = null;
 
-    await this.conversations.appendMessage(this.currentConversationId, { role: 'user', text });
+    if (persistToConversation) {
+      if (options.conversationId) {
+        this.currentConversationId = options.conversationId;
+      }
+      if (!this.currentConversationId) {
+        const conversation = await this.conversations.create();
+        this.currentConversationId = conversation.id;
+      }
+
+      conversationId = this.currentConversationId;
+      await this.conversations.appendMessage(conversationId, { role: 'user', text });
+    }
 
     const taskId = `task_${requestId}`;
     this.currentTaskId = taskId;
-    this.tasks.start(taskId, this.currentConversationId, text.slice(0, 60));
+    this.tasks.start(taskId, conversationId ?? 'voice', text.slice(0, 60));
 
     try {
-      const result = await this.runtime.handleTranscript(text, { requestId });
+      const result = await this.runtime.handleTranscript(text, {
+        requestId,
+        reasoningLevel: options.reasoningLevel,
+        attachments: options.attachments,
+      });
 
       const outcome =
         result.error === 'cancelled' ? 'cancelled' : result.completed ? 'completed' : 'failed';
@@ -860,34 +986,120 @@ export class LaflyAgentApp {
       this.tasks.settleOpenSteps(taskId, outcome);
       this.tasks.setStatus(taskId, outcome);
 
-      const stored = await this.conversations.appendMessage(this.currentConversationId, {
-        role: 'assistant',
-        text: result.text,
-        taskId,
-        error: result.error,
-      });
+      if (persistToConversation && conversationId) {
+        const stored = await this.conversations.appendMessage(conversationId, {
+          role: 'assistant',
+          text: result.text,
+          taskId,
+          error: result.error,
+        });
 
-      const conversation = await this.conversations.get(this.currentConversationId);
-      if (conversation && !conversation.taskReferences.includes(taskId)) {
-        conversation.taskReferences.push(taskId);
+        const conversation = await this.conversations.get(conversationId);
+        if (conversation && !conversation.taskReferences.includes(taskId)) {
+          conversation.taskReferences.push(taskId);
+        }
+
+        // Generate AI title on the first interaction (conversation has <= 2 messages)
+        if (conversation && conversation.messages.length <= 2) {
+          try {
+            await Promise.race([
+              this.generateConversationTitle(conversationId, text, result.text),
+              new Promise((r) => setTimeout(r, 1800)),
+            ]);
+          } catch {
+            // best-effort
+          }
+        }
+
+        this.broadcast({
+          type: 'conversation_updated',
+          payload: { conversationId, message: stored },
+          timestamp: Date.now(),
+        });
+      } else {
+        // Voice has no conversation to attach to, so the interaction itself is
+        // recorded in activity — otherwise a spoken command that triggers no
+        // tool would leave no trace at all.
+        this.activity.record({
+          label: text.length > 60 ? `${text.slice(0, 59)}…` : text,
+          status: outcome === 'completed' ? 'success' : outcome === 'failed' ? 'failure' : 'cancelled',
+          taskId,
+        });
       }
 
-      this.broadcast({
-        type: 'conversation_updated',
-        payload: { conversationId: this.currentConversationId, message: stored },
-        timestamp: Date.now(),
-      });
-
-      return { result, conversationId: this.currentConversationId, taskId };
+      return { result, conversationId, taskId };
     } finally {
       this.currentTaskId = null;
     }
   }
 
+  /**
+   * Generates a concise, natural conversation title using AI (like ChatGPT),
+   * matching the user's intent and language, instead of using raw prompt text.
+   */
+  public async generateConversationTitle(
+    conversationId: string,
+    userText: string,
+    assistantText?: string
+  ): Promise<string | null> {
+    try {
+      const cleanUser = userText
+        .replace(/\[Lampiran file.*?\]/gs, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (!cleanUser) return null;
+
+      const prompt = `You are an AI conversation title generator, exactly like ChatGPT.
+Task: Generate a concise, clear title (2 to 5 words maximum, plain text only, no quotes, no markdown, no trailing period).
+Language: MUST be in the exact same language as the user's message (Indonesian or English).
+Guidelines:
+- Capture the main topic or task (e.g., "Bahaya Rokok WhatsApp", "Profil Bigmo", "Rencana Kerja Marketing", "Musik Bruno Mars").
+- Do NOT use generic words like "Chat", "Percakapan", "Tanya", "Prompt", "Diskusi".
+- Do NOT output anything else except the title.
+
+User: "${cleanUser.slice(0, 300)}"
+${assistantText ? `Assistant: "${assistantText.slice(0, 150)}"` : ''}
+
+Title:`;
+
+      const response = await this.llmProvider.complete({
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.3,
+        maxTokens: 25,
+      });
+
+      let title = response.content?.trim() || '';
+      title = title.replace(/^["'«»“”„]+|["'«»“”„]+$/g, '');
+      title = title.replace(/^(Title|Judul):\s*/i, '');
+      title = title.replace(/\.+$/, '').trim();
+
+      if (title.length > 0 && title !== 'New Chat') {
+        if (title.length > 45) {
+          title = title.slice(0, 42).trim() + '…';
+        }
+
+        const updated = await this.conversations.updateTitle(conversationId, title);
+        if (updated) {
+          this.logger.info(`AI generated title for conversation ${conversationId}: "${title}"`);
+          this.broadcast({
+            type: 'conversation_updated',
+            payload: { conversationId, title },
+            timestamp: Date.now(),
+          });
+          return title;
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`AI conversation title generation failed: ${err}`);
+    }
+    return null;
+  }
+
   public listen(port: number, host: string = '127.0.0.1'): Promise<void> {
     return new Promise((resolve) => {
       this.httpServer.listen(port, host, () => {
-        this.logger.info(`Lafly Agent Server listening on http://${host}:${port} (ws://${host}:${port}/ws)`);
+        this.logger.info(`Lofly Agent Server listening on http://${host}:${port} (ws://${host}:${port}/ws)`);
         resolve();
       });
     });

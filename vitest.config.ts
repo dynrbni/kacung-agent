@@ -16,7 +16,7 @@ export default defineConfig({
     env: {
       SAFE_TEST_MODE: 'true',
       LIVE_SIDE_EFFECTS: 'false',
-      LAFLY_ENV: 'test',
+      LOFLY_ENV: 'test',
     },
   },
 });

@@ -1,6 +1,6 @@
 import path from 'path';
 import os from 'os';
-import type { ExecutionMode, ExecutionPolicy, SideEffectLevel, ToolSafetyMetadata } from '@lafly/types';
+import type { ExecutionMode, ExecutionPolicy, SideEffectLevel, ToolSafetyMetadata } from '@lofly/types';
 
 /**
  * Side-effect contract every tool must declare. A tool that omits `safety` is
@@ -38,6 +38,19 @@ function envFlag(env: NodeJS.ProcessEnv, key: string): boolean | undefined {
 }
 
 /**
+ * Reads a product-prefixed variable under its current name, falling back to the
+ * pre-rebrand name so an existing local `.env` keeps its protection instead of
+ * silently reverting to the default. `LOFLY_*` always wins when both are set.
+ *
+ * Pre-rebrand keys: LAFLY_ENV, LAFLY_EXECUTION_MODE, LAFLY_SANDBOX_ROOT.
+ */
+function productEnv(env: NodeJS.ProcessEnv, key: string): string | undefined {
+  const current = env[key]?.trim();
+  if (current) return current;
+  return env[`LAFLY_${key.slice('LOFLY_'.length)}`]?.trim() || undefined;
+}
+
+/**
  * Resolves the process-wide execution policy.
  *
  * The system is safe by default and fails closed: an unparseable value, a
@@ -46,7 +59,8 @@ function envFlag(env: NodeJS.ProcessEnv, key: string): boolean | undefined {
  * `SAFE_TEST_MODE=false` *and* `LIVE_SIDE_EFFECTS=true`.
  */
 export function resolveExecutionPolicy(env: NodeJS.ProcessEnv = process.env): ExecutionPolicy {
-  const sandboxRoot = env.LAFLY_SANDBOX_ROOT?.trim() || path.join(os.homedir(), 'LaflySandbox');
+  const sandboxRoot = productEnv(env, 'LOFLY_SANDBOX_ROOT') || path.join(os.homedir(), 'LoflySandbox');
+  const executionMode = productEnv(env, 'LOFLY_EXECUTION_MODE');
 
   const safeFlag = envFlag(env, 'SAFE_TEST_MODE');
   const liveFlag = envFlag(env, 'LIVE_SIDE_EFFECTS');
@@ -79,14 +93,14 @@ export function resolveExecutionPolicy(env: NodeJS.ProcessEnv = process.env): Ex
 
   if (liveFlag === true && safeFlag === false) {
     return {
-      mode: env.LAFLY_EXECUTION_MODE === 'sandbox' ? 'sandbox' : 'live',
+      mode: executionMode === 'sandbox' ? 'sandbox' : 'live',
       safeTestMode: false,
       liveSideEffects: true,
       sandboxRoot,
     };
   }
 
-  if (env.LAFLY_EXECUTION_MODE === 'sandbox') {
+  if (executionMode === 'sandbox') {
     return { mode: 'sandbox', safeTestMode: true, liveSideEffects: false, sandboxRoot };
   }
 
@@ -148,7 +162,7 @@ export function resolveSandboxPath(sandboxRoot: string, target: string): string 
   const root = path.resolve(sandboxRoot);
   const resolved = path.resolve(root, target.replace(/^~(?=\/|$)/, os.homedir()));
   if (resolved !== root && !resolved.startsWith(root + path.sep)) {
-    throw new Error(`Path escapes the Lafly sandbox root: ${target}`);
+    throw new Error(`Path escapes the Lofly sandbox root: ${target}`);
   }
   return resolved;
 }

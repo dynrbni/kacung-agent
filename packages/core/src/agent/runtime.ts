@@ -9,14 +9,14 @@ import type {
   TextToSpeechProvider,
   Logger,
   ExecutedToolCall,
-} from '@lafly/types';
-import { ToolExecutor } from '@lafly/tools';
+} from '@lofly/types';
+import { ToolExecutor } from '@lofly/tools';
 import { buildSystemPrompt } from './prompt.js';
 import { StructuredLogger } from '../logger/index.js';
 import { processTranscript } from '../transcript/index.js';
 import { parseCommand, validateWhatsAppIntent, formatCommandTrace } from '../parser/index.js';
 import { fastRoute, getToolsForDomain, determineReasoningLevel, getModelForReasoningLevel } from '../router/fast-router.js';
-import type { CommandTrace } from '@lafly/types';
+import type { CommandTrace } from '@lofly/types';
 
 export interface AgentRuntimeOptions {
   llmProvider: LLMProvider;
@@ -52,7 +52,7 @@ export class AgentRuntime {
     this.toolExecutor = options.toolExecutor || new ToolExecutor();
     this.ttsProvider = options.ttsProvider;
     this.logger = options.logger || new StructuredLogger('info');
-    this.assistantName = options.assistantName || 'Lafly';
+    this.assistantName = options.assistantName || 'Lofly';
     this.debug = options.debug ?? (process.env.DEBUG === 'true' || process.env.NODE_ENV !== 'production');
     this.allowedToolNames = options.allowedToolNames;
     this.maxHistoryMessages = options.maxHistoryMessages ?? 8;
@@ -449,7 +449,7 @@ export class AgentRuntime {
     });
 
     // ── Dynamic Reasoning Level (Section 2) ──
-    const reasoningLevel = determineReasoningLevel(query);
+    const reasoningLevel = options.reasoningLevel || determineReasoningLevel(query);
     const selectedModel = getModelForReasoningLevel(reasoningLevel, defaultModel);
 
     this.logger.info('Dynamic model selection', {
@@ -615,7 +615,8 @@ export class AgentRuntime {
                   tc.parameters.recipient = authoritative.recipient;
                 }
               }
-              if (authoritative.message) {
+              // Only override verbatim message if it is NOT dynamic generation (preserves LLM generated research/summaries)
+              if (authoritative.message && !authoritative.isDynamicGeneration) {
                 tc.parameters.message = authoritative.message;
               }
 
@@ -824,5 +825,5 @@ export class AgentRuntime {
   }
 }
 
-export { AgentRuntime as LaflyAgent };
+export { AgentRuntime as LoflyAgent };
 

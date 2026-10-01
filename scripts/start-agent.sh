@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 set -e
 
-echo "Starting Lafly Agent Daemon..."
+echo "Starting Lofly Agent Daemon..."
 pnpm dev:agent

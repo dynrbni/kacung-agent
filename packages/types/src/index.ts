@@ -1,5 +1,5 @@
 /**
- * Lafly — Core Types & Contracts
+ * Lofly — Core Types & Contracts
  */
 
 // ============================================================================
@@ -304,6 +304,8 @@ export interface AgentRunOptions {
   maxSteps?: number;
   temperature?: number;
   context?: Record<string, unknown>;
+  reasoningLevel?: 'low' | 'medium' | 'high';
+  attachments?: string[];
 }
 
 export interface AgentRunResult {
@@ -546,6 +548,7 @@ export type StructuredActionIntent =
       recipient: string;
       message: string;
       rawMarker?: string;
+      isDynamicGeneration?: boolean;
     }
   | {
       intent: 'open_whatsapp_chat';

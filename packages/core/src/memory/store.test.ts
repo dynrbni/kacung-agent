@@ -6,7 +6,7 @@ import { FileMemoryStore } from './store.js';
 
 describe('FileMemoryStore', () => {
   it('saves, searches, and deletes memories', async () => {
-    const testFile = path.join(os.tmpdir(), `lafly-mem-${Date.now()}.json`);
+    const testFile = path.join(os.tmpdir(), `lofly-mem-${Date.now()}.json`);
     const store = new FileMemoryStore(testFile);
 
     const item = await store.save({

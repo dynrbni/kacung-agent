@@ -6,8 +6,8 @@ describe('Config Loader', () => {
     const config = loadConfig();
     expect(config).toBeDefined();
     expect(config.server.port).toBeTypeOf('number');
-    expect(config.assistant.name).toBe('Lafly');
-    expect(config.assistant.wakePhrase).toBe('Woi Lafly');
+    expect(config.assistant.name).toBe('Lofly');
+    expect(config.assistant.wakePhrase).toBe('Woi Lofly');
     expect(config.assistant.languages).toContain('id');
     expect(config.assistant.languages).toContain('en');
     expect(config.security.confirmSensitiveActions).toBe(false);

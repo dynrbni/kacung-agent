@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import type { Conversation, ConversationMessage } from '@lafly/types';
+import type { Conversation, ConversationMessage } from '@lofly/types';
 
 /**
  * Persistent conversation history.
@@ -41,7 +41,7 @@ export class FileConversationStore implements ConversationStore {
   private nextSeq = 1;
 
   constructor(customPath?: string) {
-    const dir = path.join(os.homedir(), '.lafly');
+    const dir = path.join(os.homedir(), '.lofly');
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
@@ -55,10 +55,19 @@ export class FileConversationStore implements ConversationStore {
       const raw = fs.readFileSync(this.filePath, 'utf-8');
       const list = JSON.parse(raw) as Conversation[];
       this.conversations.clear();
+      let prunedAny = false;
       for (const conversation of list) {
+        // Prune empty conversations (0 messages) that have the default title
+        if (conversation.title === DEFAULT_TITLE && (!conversation.messages || conversation.messages.length === 0)) {
+          prunedAny = true;
+          continue;
+        }
         // Tolerate records written before the sequence counter existed.
         this.conversations.set(conversation.id, { ...conversation, seq: conversation.seq ?? 0 });
         this.nextSeq = Math.max(this.nextSeq, (conversation.seq ?? 0) + 1);
+      }
+      if (prunedAny) {
+        this.persist();
       }
     } catch {
       this.conversations.clear();

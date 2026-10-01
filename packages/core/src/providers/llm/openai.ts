@@ -4,7 +4,7 @@ import type {
   LLMCompletionResponse,
   ToolCallRequest,
   ToolDefinition,
-} from '@lafly/types';
+} from '@lofly/types';
 
 export interface OpenAILLMOptions {
   apiKey?: string;

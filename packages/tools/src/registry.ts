@@ -1,6 +1,6 @@
-import type { ToolDefinition } from '@lafly/types';
+import type { ToolDefinition } from '@lofly/types';
 import { openAppTool, closeAppTool, focusAppTool, isAppRunningTool } from './definitions/apps.js';
-import { screenshotTool, screenshotAppTool } from './definitions/screen.js';
+import { screenshotTool, screenshotAppTool, locateOnScreenTool, clickElementByTextTool } from './definitions/screen.js';
 import { clickTool, doubleClickTool, rightClickTool, moveMouseTool, dragTool, scrollTool } from './definitions/mouse.js';
 import { typeTextTool, pressKeyTool, hotkeyTool } from './definitions/keyboard.js';
 import {
@@ -91,6 +91,8 @@ export class ToolRegistry {
       screenshotTool as unknown as ToolDefinition,
       screenshotAppTool as unknown as ToolDefinition,
       inspectUITool as unknown as ToolDefinition,
+      locateOnScreenTool as unknown as ToolDefinition,
+      clickElementByTextTool as unknown as ToolDefinition,
 
       // Mouse
       clickTool as unknown as ToolDefinition,

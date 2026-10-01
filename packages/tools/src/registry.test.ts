@@ -4,7 +4,7 @@ import { ToolRegistry } from './registry.js';
 describe('ToolRegistry', () => {
   it('should initialize with all default computer-use tools', () => {
     const registry = new ToolRegistry();
-    expect(registry.count()).toBe(39);
+    expect(registry.count()).toBe(41);
 
     const expectedTools = [
       'open_app',
@@ -14,6 +14,8 @@ describe('ToolRegistry', () => {
       'screenshot',
       'screenshot_app',
       'inspect_ui',
+      'locate_on_screen',
+      'click_element_by_text',
       'click',
       'double_click',
       'right_click',
@@ -62,7 +64,7 @@ describe('ToolRegistry', () => {
     const registry = new ToolRegistry();
     const llmTools = registry.toLLMTools();
 
-    expect(llmTools.length).toBe(39);
+    expect(llmTools.length).toBe(41);
     for (const item of llmTools) {
       expect(item.type).toBe('function');
       expect(item.function.name).toBeTypeOf('string');

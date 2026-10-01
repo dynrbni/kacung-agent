@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { LaflyAgent } from './agent.js';
-import type { LLMProvider, LLMCompletionOptions, LLMCompletionResponse } from '@lafly/types';
-import { ToolExecutor } from '@lafly/tools';
+import { LoflyAgent } from './agent.js';
+import type { LLMProvider, LLMCompletionOptions, LLMCompletionResponse } from '@lofly/types';
+import { ToolExecutor } from '@lofly/tools';
 
-describe('Lafly Agent & 9Router Acceptance Tests', () => {
+describe('Lofly Agent & 9Router Acceptance Tests', () => {
   // ──────────────────────────────────────────────────────────────────────
   // Fast-Route Tests: Simple commands bypass LLM entirely
   // ──────────────────────────────────────────────────────────────────────
@@ -23,10 +23,10 @@ describe('Lafly Agent & 9Router Acceptance Tests', () => {
     const executor = new ToolExecutor();
     const executeSpy = vi.spyOn(executor, 'execute');
 
-    const agent = new LaflyAgent({
+    const agent = new LoflyAgent({
       llmProvider: mock9RouterLLM,
       toolExecutor: executor,
-      assistantName: 'Lafly',
+      assistantName: 'Lofly',
       debug: false,
     });
 
@@ -56,10 +56,10 @@ describe('Lafly Agent & 9Router Acceptance Tests', () => {
     const executor = new ToolExecutor();
     const executeSpy = vi.spyOn(executor, 'execute');
 
-    const agent = new LaflyAgent({
+    const agent = new LoflyAgent({
       llmProvider: mock9RouterLLM,
       toolExecutor: executor,
-      assistantName: 'Lafly',
+      assistantName: 'Lofly',
       debug: false,
     });
 
@@ -102,10 +102,10 @@ describe('Lafly Agent & 9Router Acceptance Tests', () => {
       };
     });
 
-    const agent = new LaflyAgent({
+    const agent = new LoflyAgent({
       llmProvider: mock9RouterLLM,
       toolExecutor: executor,
-      assistantName: 'Lafly',
+      assistantName: 'Lofly',
       debug: false,
     });
 
@@ -132,9 +132,9 @@ describe('Lafly Agent & 9Router Acceptance Tests', () => {
       },
     };
 
-    const agent = new LaflyAgent({
+    const agent = new LoflyAgent({
       llmProvider: broken9RouterLLM,
-      assistantName: 'Lafly',
+      assistantName: 'Lofly',
       debug: false,
     });
 
@@ -156,9 +156,9 @@ describe('Lafly Agent & 9Router Acceptance Tests', () => {
       },
     };
 
-    const agent = new LaflyAgent({
+    const agent = new LoflyAgent({
       llmProvider: unauthorized9RouterLLM,
-      assistantName: 'Lafly',
+      assistantName: 'Lofly',
       debug: false,
     });
 
@@ -179,9 +179,9 @@ describe('Lafly Agent & 9Router Acceptance Tests', () => {
       },
     };
 
-    const agent = new LaflyAgent({
+    const agent = new LoflyAgent({
       llmProvider: mock9RouterLLM,
-      assistantName: 'Lafly',
+      assistantName: 'Lofly',
       debug: false,
     });
 
@@ -210,10 +210,10 @@ describe('Lafly Agent & 9Router Acceptance Tests', () => {
     const executor = new ToolExecutor();
     const executeSpy = vi.spyOn(executor, 'execute');
 
-    const agent = new LaflyAgent({
+    const agent = new LoflyAgent({
       llmProvider: mock9RouterLLM,
       toolExecutor: executor,
-      assistantName: 'Lafly',
+      assistantName: 'Lofly',
       debug: false,
     });
 
@@ -243,10 +243,10 @@ describe('Lafly Agent & 9Router Acceptance Tests', () => {
     const executor = new ToolExecutor();
     const executeSpy = vi.spyOn(executor, 'execute');
 
-    const agent = new LaflyAgent({
+    const agent = new LoflyAgent({
       llmProvider: mock9RouterLLM,
       toolExecutor: executor,
-      assistantName: 'Lafly',
+      assistantName: 'Lofly',
       debug: false,
     });
 
@@ -271,9 +271,9 @@ describe('Lafly Agent & 9Router Acceptance Tests', () => {
       },
     };
 
-    const agent = new LaflyAgent({
+    const agent = new LoflyAgent({
       llmProvider: mock9RouterLLM,
-      assistantName: 'Lafly',
+      assistantName: 'Lofly',
       debug: false,
     });
 

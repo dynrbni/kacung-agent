@@ -1,4 +1,4 @@
-import type { ToolCallRequest } from '@lafly/types';
+import type { ToolCallRequest } from '@lofly/types';
 import { parseCommand } from '../parser/command-parser.js';
 import { validateWhatsAppIntent } from '../parser/validator.js';
 
@@ -53,7 +53,7 @@ const VOLUME_PATTERNS = [
 ];
 
 const PLAY_MUSIC_PATTERNS = [
-  /^(?:coba\s+|tolong\s+|please\s+)?(?:putar|play|mainkan)\s+(?:lagu\s+|musik\s+|music\s+|song\s+)?(.+?)(?:\s+di\s+(?:spotify|apple\s+music))?(?:\s+dong|\s+ya|\s+deh)?\.?$/i,
+  /^(?:coba\s+|tolong\s+|please\s+)?(?:putar|puter|setel|play|mainkan|nyalakan)\s+(?:lagu\s+|musik\s+|music\s+|song\s+)?(.+?)(?:\s+di\s+(?:spotify|apple\s+music))?(?:\s+dong|\s+ya|\s+deh)?\.?$/i,
 ];
 
 const SCREENSHOT_PATTERNS = [
@@ -117,6 +117,12 @@ export function fastRoute(transcript: string): FastRouteResult {
   const parsedWa = parseCommand(input);
   if (parsedWa.isStructured && parsedWa.primaryIntent) {
     if (parsedWa.primaryIntent.intent === 'send_whatsapp_message') {
+      // If dynamic research or generation is requested (e.g. Google search summary, draft a message),
+      // DO NOT fast-route: forward to LLM agent to search, synthesize, and compose!
+      if (parsedWa.primaryIntent.isDynamicGeneration) {
+        return { matched: false };
+      }
+
       const validation = validateWhatsAppIntent(parsedWa.primaryIntent);
       if (validation.valid && parsedWa.primaryIntent.recipient && parsedWa.primaryIntent.message) {
         const calls: ToolCallRequest[] = [
@@ -165,6 +171,16 @@ export function fastRoute(transcript: string): FastRouteResult {
         };
       }
     } else if (parsedWa.primaryIntent.intent === 'open_whatsapp_chat' && parsedWa.primaryIntent.recipient) {
+      // Guard: recipient of open_whatsapp_chat MUST be a plausible contact name (1-3 words, no conversational sentences)
+      const recipient = parsedWa.primaryIntent.recipient.trim();
+      const words = recipient.split(/\s+/);
+      const invalidContactWords = /\b(?:tentang|soal|buat|google|ringkas|pesan|rokok|makan|nanti|besok|tahu|kasih|suruh|ambil)\b/i;
+
+      if (words.length > 3 || invalidContactWords.test(recipient)) {
+        // Not a plausible standalone contact name, let LLM agent handle it
+        return { matched: false };
+      }
+
       return {
         matched: true,
         toolCalls: [
@@ -172,11 +188,11 @@ export function fastRoute(transcript: string): FastRouteResult {
             id: `fast_wa_${Date.now()}`,
             name: 'open_whatsapp_chat',
             parameters: {
-              contact: parsedWa.primaryIntent.recipient,
+              contact: recipient,
             },
           },
         ],
-        confirmText: `✓ Opening WhatsApp chat with ${parsedWa.primaryIntent.recipient}`,
+        confirmText: `✓ Opening WhatsApp chat with ${recipient}`,
       };
     }
   }

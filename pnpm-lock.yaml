@@ -8,16 +8,16 @@ importers:
 
   .:
     devDependencies:
-      '@lafly/config':
+      '@lofly/config':
         specifier: workspace:*
         version: link:packages/config
-      '@lafly/core':
+      '@lofly/core':
         specifier: workspace:*
         version: link:packages/core
-      '@lafly/tools':
+      '@lofly/tools':
         specifier: workspace:*
         version: link:packages/tools
-      '@lafly/types':
+      '@lofly/types':
         specifier: workspace:*
         version: link:packages/types
       '@types/node':
@@ -38,16 +38,16 @@ importers:
 
   apps/agent:
     dependencies:
-      '@lafly/config':
+      '@lofly/config':
         specifier: workspace:*
         version: link:../../packages/config
-      '@lafly/core':
+      '@lofly/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@lafly/tools':
+      '@lofly/tools':
         specifier: workspace:*
         version: link:../../packages/tools
-      '@lafly/types':
+      '@lofly/types':
         specifier: workspace:*
         version: link:../../packages/types
       ws:
@@ -60,7 +60,7 @@ importers:
 
   packages/config:
     dependencies:
-      '@lafly/types':
+      '@lofly/types':
         specifier: workspace:*
         version: link:../types
       dotenv:
@@ -69,13 +69,13 @@ importers:
 
   packages/core:
     dependencies:
-      '@lafly/config':
+      '@lofly/config':
         specifier: workspace:*
         version: link:../config
-      '@lafly/tools':
+      '@lofly/tools':
         specifier: workspace:*
         version: link:../tools
-      '@lafly/types':
+      '@lofly/types':
         specifier: workspace:*
         version: link:../types
       openai:
@@ -84,10 +84,10 @@ importers:
 
   packages/tools:
     dependencies:
-      '@lafly/config':
+      '@lofly/config':
         specifier: workspace:*
         version: link:../config
-      '@lafly/types':
+      '@lofly/types':
         specifier: workspace:*
         version: link:../types
 

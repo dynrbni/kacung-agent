@@ -1,14 +1,14 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import type { MemoryItem, MemoryStore } from '@lafly/types';
+import type { MemoryItem, MemoryStore } from '@lofly/types';
 
 export class FileMemoryStore implements MemoryStore {
   private filePath: string;
   private items = new Map<string, MemoryItem>();
 
   constructor(customPath?: string) {
-    const dir = path.join(os.homedir(), '.lafly');
+    const dir = path.join(os.homedir(), '.lofly');
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }

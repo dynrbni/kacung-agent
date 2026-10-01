@@ -37,3 +37,5 @@ pnpm-debug.log*
 .vscode/
 *.sublime-project
 *.sublime-workspace
+.freebuff/
+packages/tools/bin/vision_ocr

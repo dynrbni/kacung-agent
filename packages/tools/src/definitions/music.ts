@@ -1,7 +1,7 @@
 import { execFile, execFileSync } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@lafly/types';
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@lofly/types';
 import { toolSafety } from '../safety/policy.js';
 
 const execFileAsync = promisify(execFile);
@@ -284,7 +284,6 @@ export const playMusicTool: ToolDefinition<PlayMusicParams, PlayMusicResultData>
             const swiftDoubleClick = `
 import CoreGraphics
 import Foundation
-import { toolSafety } from '../safety/policy.js';
 
 let point = CGPoint(x: ${clickX}, y: ${clickY})
 let move = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)

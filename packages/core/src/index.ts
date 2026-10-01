@@ -3,6 +3,7 @@ export * from './memory/store.js';
 export * from './conversation/store.js';
 export * from './task/manager.js';
 export * from './desktop/control-center.js';
+export * from './desktop/skills.js';
 export * from './providers/llm/gemini.js';
 export * from './providers/llm/openai.js';
 export * from './providers/llm/ninerouter.js';

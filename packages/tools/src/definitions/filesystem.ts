@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@lafly/types';
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from '@lofly/types';
 import { toolSafety, resolveSandboxPath } from '../safety/policy.js';
 
 /**

@@ -1,5 +1,5 @@
 export {
-  AgentRuntime as LaflyAgent,
+  AgentRuntime as LoflyAgent,
   AgentRuntime,
   type AgentRuntimeOptions,
   type AssistantEventListener,

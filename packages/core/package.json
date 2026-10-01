@@ -1,5 +1,5 @@
 {
-  "name": "@lafly/core",
+  "name": "@lofly/core",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,9 +10,9 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "@lafly/config": "workspace:*",
-    "@lafly/tools": "workspace:*",
-    "@lafly/types": "workspace:*",
+    "@lofly/config": "workspace:*",
+    "@lofly/tools": "workspace:*",
+    "@lofly/types": "workspace:*",
     "openai": "^7.23.0"
   }
 }
