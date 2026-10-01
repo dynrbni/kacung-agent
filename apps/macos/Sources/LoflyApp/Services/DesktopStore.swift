@@ -461,9 +461,10 @@ public final class DesktopStore: ObservableObject {
         }
 
         let count = streamBuffer.count
-        let step = max(2, min(count, max(6, count / 4)))
+        let dynamicStep = max(2, count / 4)
+        let step = max(1, min(count, dynamicStep))
         let chunk = String(streamBuffer.prefix(step))
-        streamBuffer.removeFirst(step)
+        streamBuffer = String(streamBuffer.dropFirst(step))
 
         if let index = messages.firstIndex(where: { $0.id == messageId }) {
             messages[index].text += chunk
