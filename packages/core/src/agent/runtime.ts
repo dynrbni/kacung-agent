@@ -381,6 +381,12 @@ export class AgentRuntime {
         this.messages.push({ role: 'user', content: query });
         this.messages.push({ role: 'assistant', content: confirmText });
 
+        if (confirmText) {
+          options.onChunk?.(confirmText);
+          this.emitEvent('stream_chunk', { requestId, chunk: confirmText, stepIndex: 1 });
+          this.emitEvent('stream_end', { requestId, text: confirmText });
+        }
+
         // TTS (if enabled)
         if (confirmText && this.ttsProvider) {
           this.setState('speaking');
@@ -528,6 +534,11 @@ export class AgentRuntime {
             messages: this.messages,
             tools,
             temperature: options.temperature,
+            onChunk: (chunk: string) => {
+              options.onChunk?.(chunk);
+              this.emitEvent('stream_chunk', { requestId, chunk, stepIndex });
+            },
+            signal: abortController.signal,
           });
 
           // Restore original model
@@ -724,6 +735,11 @@ export class AgentRuntime {
         this.messages.push({
           role: 'assistant',
           content: finalResponse,
+        });
+
+        this.emitEvent('stream_end', {
+          requestId,
+          text: finalResponse,
         });
 
         break;

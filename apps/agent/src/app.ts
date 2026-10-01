@@ -529,9 +529,66 @@ export class LoflyAgentApp {
           ? body.conversationId.trim()
           : undefined;
 
+        const isStream = Boolean(body.stream) || req.headers.accept?.includes('text/event-stream');
+        const requestId = `chat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
+        if (isStream) {
+          res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache, no-transform',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+          });
+
+          res.write(`data: ${JSON.stringify({ type: 'start', requestId })}\n\n`);
+
+          let clientAborted = false;
+          req.on('close', () => {
+            clientAborted = true;
+          });
+
+          try {
+            const { result, taskId, conversationId } = await this.runTracked(
+              fullQuery,
+              requestId,
+              {
+                source,
+                reasoningLevel,
+                attachments,
+                conversationId: conversationIdParam,
+                onChunk: (chunk: string) => {
+                  if (!clientAborted) {
+                    res.write(`data: ${JSON.stringify({ type: 'chunk', text: chunk, requestId })}\n\n`);
+                  }
+                },
+              }
+            );
+
+            if (!clientAborted) {
+              res.write(
+                `data: ${JSON.stringify({
+                  type: 'done',
+                  text: result.text,
+                  taskId,
+                  conversationId,
+                  error: result.error,
+                  completed: result.completed,
+                })}\n\n`
+              );
+              res.end();
+            }
+          } catch (err) {
+            if (!clientAborted) {
+              res.write(`data: ${JSON.stringify({ type: 'error', error: String(err) })}\n\n`);
+              res.end();
+            }
+          }
+          return;
+        }
+
         const { result, taskId, conversationId } = await this.runTracked(
           fullQuery,
-          `chat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          requestId,
           { source, reasoningLevel, attachments, conversationId: conversationIdParam }
         );
         sendJson(200, { ...result, taskId, conversationId });
@@ -949,6 +1006,7 @@ export class LoflyAgentApp {
       reasoningLevel?: 'low' | 'medium' | 'high';
       attachments?: string[];
       conversationId?: string;
+      onChunk?: (chunk: string) => void;
     } = {}
   ): Promise<{ result: AgentRunResult; conversationId: string | null; taskId: string }> {
     const persistToConversation = options.source !== 'voice';
@@ -976,6 +1034,7 @@ export class LoflyAgentApp {
         requestId,
         reasoningLevel: options.reasoningLevel,
         attachments: options.attachments,
+        onChunk: options.onChunk,
       });
 
       const outcome =

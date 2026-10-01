@@ -306,6 +306,8 @@ export interface AgentRunOptions {
   context?: Record<string, unknown>;
   reasoningLevel?: 'low' | 'medium' | 'high';
   attachments?: string[];
+  onChunk?: (chunk: string) => void;
+  signal?: AbortSignal;
 }
 
 export interface AgentRunResult {
@@ -324,6 +326,8 @@ export interface LLMCompletionOptions {
   tools?: ToolDefinition[];
   temperature?: number;
   maxTokens?: number;
+  onChunk?: (chunk: string) => void;
+  signal?: AbortSignal;
 }
 
 export interface LLMCompletionResponse {
@@ -431,6 +435,8 @@ export type AssistantEventType =
   | 'task_update'
   | 'activity'
   | 'conversation_updated'
+  | 'stream_chunk'
+  | 'stream_end'
   | 'error';
 
 export interface AssistantEvent<T = unknown> {

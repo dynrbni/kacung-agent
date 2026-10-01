@@ -238,18 +238,27 @@ struct ChatView: View {
                     .help("Speech to text (Rekam suara)")
                     .accessibilityLabel("Speech to text")
 
-                    // Send or cancel button
-                    if store.activeTask != nil {
+                    // Send or stop button (ChatGPT style)
+                    if store.isStreaming || store.isSending || store.activeTask != nil {
                         Button {
-                            store.cancelActiveTask()
+                            if store.isStreaming || store.isSending {
+                                store.stopStreaming()
+                            } else {
+                                store.cancelActiveTask()
+                            }
                         } label: {
-                            Image(systemName: "stop.circle.fill")
-                                .font(.system(size: 26))
-                                .foregroundStyle(.red)
+                            ZStack {
+                                Circle()
+                                    .fill(Color.primary)
+                                    .frame(width: 28, height: 28)
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(Color(nsColor: .windowBackgroundColor))
+                                    .frame(width: 10, height: 10)
+                            }
                         }
                         .buttonStyle(.plain)
-                        .help("Cancel the running task")
-                        .accessibilityLabel("Cancel the running task")
+                        .help("Stop generating")
+                        .accessibilityLabel("Stop generating")
                     } else {
                         let canSend = !store.isSending && (!store.composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !store.attachments.isEmpty)
                         Button(action: submit) {
@@ -264,7 +273,7 @@ struct ChatView: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(!canSend)
-                        .help(store.isSending ? "Waiting for the agent" : "Send message")
+                        .help("Send message")
                         .accessibilityLabel("Send message")
                     }
                 }
@@ -567,15 +576,9 @@ struct MessageRow: View {
     let message: ConversationMessage
     @State private var isHovering = false
     @State private var didCopy = false
-    @State private var revealedLength: Int = 0
-    @State private var isStreaming = false
-    @State private var streamTask: Task<Void, Never>? = nil
 
-    private var displayedText: String {
-        if isStreaming {
-            return String(message.text.prefix(revealedLength))
-        }
-        return message.text
+    private var isMessageStreaming: Bool {
+        store.isStreaming && store.activeStreamingMessageId == message.id
     }
 
     var body: some View {
@@ -598,26 +601,12 @@ struct MessageRow: View {
                         .padding(.vertical, 4)
                     }
                 } else if message.role == .assistant {
-                    // Assistant response: rendered with rich markdown typography
-                    VStack(alignment: .leading, spacing: 4) {
-                        RichMarkdownView(text: displayedText)
+                    // Assistant response: rendered with rich markdown typography and real-time streaming caret
+                    RichMarkdownView(text: message.text, isStreaming: isMessageStreaming)
+                        .contentShape(Rectangle())
 
-                        if isStreaming {
-                            Circle()
-                                .fill(LoflyTheme.accent)
-                                .frame(width: 6, height: 6)
-                                .padding(.top, 2)
-                        }
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        if isStreaming {
-                            finishStreamingInstantly()
-                        }
-                    }
-
-                    // ChatGPT-style Action Bar below AI Output
-                    if !isStreaming && !message.text.isEmpty {
+                    // ChatGPT-style Action Bar below AI Output (hidden while streaming)
+                    if !isMessageStreaming && !message.text.isEmpty {
                         assistantActionBar
                     }
                 } else {
@@ -654,15 +643,6 @@ struct MessageRow: View {
             }
         }
         .onHover { isHovering = $0 }
-        .onAppear {
-            setupStreaming()
-        }
-        .onChange(of: message.text) { _ in
-            setupStreaming()
-        }
-        .onDisappear {
-            streamTask?.cancel()
-        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(message.role == .user ? "You" : "Assistant") said: \(message.text)")
     }
@@ -775,45 +755,6 @@ struct MessageRow: View {
         .padding(.top, 4)
         .opacity(isHovering || didCopy || currentRating != nil ? 1.0 : 0.7)
         .animation(.easeInOut(duration: 0.15), value: isHovering)
-    }
-
-    // MARK: - Streaming & Typewriter
-
-    private func setupStreaming() {
-        guard message.role == .assistant, !message.text.isEmpty else {
-            revealedLength = message.text.count
-            isStreaming = false
-            return
-        }
-
-        if store.newlyArrivedMessageId == message.id {
-            revealedLength = 0
-            isStreaming = true
-            streamTask?.cancel()
-            streamTask = Task { @MainActor in
-                let totalChars = message.text.count
-                var current = 0
-                while current < totalChars && !Task.isCancelled {
-                    let step = max(2, min(8, (totalChars - current) / 25 + 2))
-                    current = min(totalChars, current + step)
-                    revealedLength = current
-                    try? await Task.sleep(nanoseconds: 16_000_000)
-                }
-                revealedLength = totalChars
-                isStreaming = false
-                store.clearNewlyArrivedMessage(message.id)
-            }
-        } else {
-            revealedLength = message.text.count
-            isStreaming = false
-        }
-    }
-
-    private func finishStreamingInstantly() {
-        streamTask?.cancel()
-        revealedLength = message.text.count
-        isStreaming = false
-        store.clearNewlyArrivedMessage(message.id)
     }
 }
 

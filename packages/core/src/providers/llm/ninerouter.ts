@@ -100,13 +100,84 @@ export class NineRouterProvider implements LLMProvider {
 
     for (const targetModel of candidateModels) {
       try {
-        const response = await this.client.chat.completions.create({
-          model: targetModel,
-          messages: formattedMessages,
-          tools: formattedTools,
-          temperature: options.temperature ?? 0.3,
-          max_tokens: options.maxTokens ?? 2048,
-        });
+        if (options.onChunk) {
+          const stream = await this.client.chat.completions.create(
+            {
+              model: targetModel,
+              messages: formattedMessages,
+              tools: formattedTools,
+              temperature: options.temperature ?? 0.3,
+              max_tokens: options.maxTokens ?? 2048,
+              stream: true,
+            },
+            { signal: options.signal }
+          );
+
+          let accumulatedContent = '';
+          const toolCallAccumulator: Record<number, { id: string; name: string; args: string }> = {};
+
+          for await (const chunk of stream) {
+            if (options.signal?.aborted) break;
+            const choice = chunk.choices?.[0];
+            const delta = choice?.delta;
+            if (!delta) continue;
+
+            if (delta.content) {
+              accumulatedContent += delta.content;
+              options.onChunk(delta.content);
+            }
+
+            if (delta.tool_calls) {
+              for (const tc of delta.tool_calls) {
+                const idx = tc.index ?? 0;
+                if (!toolCallAccumulator[idx]) {
+                  toolCallAccumulator[idx] = {
+                    id: tc.id || `call_${Date.now()}_${idx}`,
+                    name: tc.function?.name || '',
+                    args: '',
+                  };
+                }
+                if (tc.id) toolCallAccumulator[idx].id = tc.id;
+                if (tc.function?.name) toolCallAccumulator[idx].name += tc.function.name;
+                if (tc.function?.arguments) toolCallAccumulator[idx].args += tc.function.arguments;
+              }
+            }
+          }
+
+          const toolCalls: ToolCallRequest[] = [];
+          for (const item of Object.values(toolCallAccumulator)) {
+            if (item.name) {
+              let parsedArgs: Record<string, unknown> = {};
+              try {
+                parsedArgs = JSON.parse(item.args || '{}');
+              } catch {
+                // best-effort
+              }
+              toolCalls.push({
+                id: item.id,
+                name: item.name,
+                parameters: parsedArgs,
+              });
+            }
+          }
+
+          return {
+            content: accumulatedContent || null,
+            toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+            rawResponse: null,
+          };
+        }
+
+        const response = await this.client.chat.completions.create(
+          {
+            model: targetModel,
+            messages: formattedMessages,
+            tools: formattedTools,
+            temperature: options.temperature ?? 0.3,
+            max_tokens: options.maxTokens ?? 2048,
+          },
+          { signal: options.signal }
+        );
 
         const choice = response.choices?.[0]?.message;
         if (!choice) {

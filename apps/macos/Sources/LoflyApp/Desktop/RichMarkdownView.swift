@@ -188,27 +188,45 @@ public struct MarkdownParser {
 
 public struct RichMarkdownView: View {
     let text: String
+    let isStreaming: Bool
+    @State private var caretVisible = true
+    private let caretTimer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
-    public init(text: String) {
+    public init(text: String, isStreaming: Bool = false) {
         self.text = text
+        self.isStreaming = isStreaming
     }
 
     public var body: some View {
         let blocks = MarkdownParser.parse(text)
 
         VStack(alignment: .leading, spacing: 14) {
-            ForEach(blocks) { block in
-                blockView(for: block)
+            ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
+                blockView(for: block, isLast: index == blocks.count - 1)
             }
         }
         .textSelection(.enabled)
+        .onReceive(caretTimer) { _ in
+            if isStreaming {
+                caretVisible.toggle()
+            }
+        }
+    }
+
+    private func caretText(isLast: Bool) -> Text {
+        if isStreaming && isLast {
+            return Text(" ▋")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(caretVisible ? LoflyTheme.accent : Color.clear)
+        }
+        return Text("")
     }
 
     @ViewBuilder
-    private func blockView(for block: MarkdownBlock) -> some View {
+    private func blockView(for block: MarkdownBlock, isLast: Bool) -> some View {
         switch block {
         case .heading1(let content):
-            Text(MarkdownParser.inlineAttributedString(content))
+            (Text(MarkdownParser.inlineAttributedString(content)) + caretText(isLast: isLast))
                 .font(.system(size: 20, weight: .bold))
                 .lineSpacing(5)
                 .foregroundStyle(.primary)
@@ -216,7 +234,7 @@ public struct RichMarkdownView: View {
                 .padding(.bottom, 2)
 
         case .heading2(let content):
-            Text(MarkdownParser.inlineAttributedString(content))
+            (Text(MarkdownParser.inlineAttributedString(content)) + caretText(isLast: isLast))
                 .font(.system(size: 17.5, weight: .bold))
                 .lineSpacing(4.5)
                 .foregroundStyle(.primary)
@@ -224,7 +242,7 @@ public struct RichMarkdownView: View {
                 .padding(.bottom, 2)
 
         case .heading3(let content):
-            Text(MarkdownParser.inlineAttributedString(content))
+            (Text(MarkdownParser.inlineAttributedString(content)) + caretText(isLast: isLast))
                 .font(.system(size: 15.5, weight: .semibold))
                 .lineSpacing(4)
                 .foregroundStyle(.primary)
@@ -232,7 +250,7 @@ public struct RichMarkdownView: View {
                 .padding(.bottom, 1)
 
         case .heading4(let content):
-            Text(MarkdownParser.inlineAttributedString(content))
+            (Text(MarkdownParser.inlineAttributedString(content)) + caretText(isLast: isLast))
                 .font(.system(size: 14.5, weight: .semibold))
                 .lineSpacing(4)
                 .foregroundStyle(.primary)
@@ -245,7 +263,7 @@ public struct RichMarkdownView: View {
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Color.secondary.opacity(0.8))
                     .frame(width: 8, alignment: .center)
-                Text(MarkdownParser.inlineAttributedString(content))
+                (Text(MarkdownParser.inlineAttributedString(content)) + caretText(isLast: isLast))
                     .font(.system(size: 14.5, weight: .regular))
                     .lineSpacing(5.5)
                     .foregroundStyle(.primary)
@@ -259,7 +277,7 @@ public struct RichMarkdownView: View {
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(.primary)
                     .frame(minWidth: 20, alignment: .leading)
-                Text(MarkdownParser.inlineAttributedString(content))
+                (Text(MarkdownParser.inlineAttributedString(content)) + caretText(isLast: isLast))
                     .font(.system(size: 14.5, weight: .regular))
                     .lineSpacing(5.5)
                     .foregroundStyle(.primary)
@@ -269,19 +287,20 @@ public struct RichMarkdownView: View {
             .padding(.bottom, 2)
 
         case .paragraph(let content):
-            Text(MarkdownParser.inlineAttributedString(content))
+            (Text(MarkdownParser.inlineAttributedString(content)) + caretText(isLast: isLast))
                 .font(.system(size: 14.5, weight: .regular))
                 .lineSpacing(5.5)
                 .foregroundStyle(.primary)
                 .padding(.bottom, 2)
 
         case .codeBlock(let code, let lang):
-            CodeBlockView(code: code, lang: lang)
+            CodeBlockView(code: code, lang: lang, isStreaming: isStreaming && isLast, caretVisible: caretVisible)
 
         case .tableRow(let cells, let isHeader):
             HStack(alignment: .top, spacing: 12) {
-                ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in
-                    Text(MarkdownParser.inlineAttributedString(cell))
+                ForEach(Array(cells.enumerated()), id: \.offset) { cellIndex, cell in
+                    let isLastCell = cellIndex == cells.count - 1
+                    (Text(MarkdownParser.inlineAttributedString(cell)) + (isLast && isLastCell ? caretText(isLast: true) : Text("")))
                         .font(isHeader ? .system(size: 13.5, weight: .bold) : .system(size: 13.5, weight: .regular))
                         .foregroundStyle(isHeader ? .primary : .secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -304,7 +323,16 @@ public struct RichMarkdownView: View {
 private struct CodeBlockView: View {
     let code: String
     let lang: String?
+    let isStreaming: Bool
+    let caretVisible: Bool
     @State private var didCopy = false
+
+    init(code: String, lang: String?, isStreaming: Bool = false, caretVisible: Bool = true) {
+        self.code = code
+        self.lang = lang
+        self.isStreaming = isStreaming
+        self.caretVisible = caretVisible
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -344,10 +372,17 @@ private struct CodeBlockView: View {
             .background(Color.primary.opacity(0.04))
 
             ScrollView(.horizontal, showsIndicators: false) {
-                Text(code)
-                    .font(.system(size: 12.5, design: .monospaced))
-                    .padding(12)
-                    .textSelection(.enabled)
+                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                    Text(code)
+                        .font(.system(size: 12.5, design: .monospaced))
+                    if isStreaming {
+                        Text(" ▋")
+                            .font(.system(size: 12.5, weight: .bold, design: .monospaced))
+                            .foregroundColor(caretVisible ? LoflyTheme.accent : Color.clear)
+                    }
+                }
+                .padding(12)
+                .textSelection(.enabled)
             }
         }
         .background(

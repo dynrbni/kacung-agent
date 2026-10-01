@@ -63,10 +63,17 @@ public final class DesktopStore: ObservableObject {
     )
 
     @Published public private(set) var isSending = false
+    @Published public private(set) var isStreaming = false
+    @Published public private(set) var activeStreamingMessageId: String?
     @Published public private(set) var banner: String?
 
     /// Bumped whenever a message arrives so the transcript view can scroll.
     @Published public private(set) var scrollTrigger = UUID()
+
+    private var activeStreamTask: Task<Void, Never>?
+    private var streamBuffer = ""
+    private var streamFlushTimer: Timer?
+    private var lastScrollTime: Date = .distantPast
 
     /// Set by the sidebar / root view so a push-to-talk started from any
     /// section can bring the chat surface forward.
@@ -359,16 +366,17 @@ public final class DesktopStore: ObservableObject {
         attachments.removeAll()
     }
 
-    /// Sends the composer text and attachments. All prompts typed into the Chat composer are
-    /// executed and tracked in chat with user bubble and live assistant response.
+    /// Sends the composer text and attachments. Prompts are streamed progressively in real-time
+    /// with natural token typing animation, blinking cursor, and live auto-scroll.
     public func send() {
         let text = composerText.trimmingCharacters(in: .whitespacesAndNewlines)
         let pendingAttachments = attachments
-        guard (!text.isEmpty || !pendingAttachments.isEmpty), !isSending else { return }
+        guard (!text.isEmpty || !pendingAttachments.isEmpty), !isSending, !isStreaming else { return }
 
         composerText = ""
         attachments.removeAll()
         isSending = true
+        isStreaming = true
 
         var userDisplayText = text
         if !pendingAttachments.isEmpty {
@@ -391,8 +399,10 @@ public final class DesktopStore: ObservableObject {
         )
         messages.append(userMsg)
 
-        // 2. Add an assistant thinking / planning placeholder
+        // 2. Add an assistant thinking placeholder
         let pendingId = "pending-\(UUID().uuidString)"
+        activeStreamingMessageId = pendingId
+        streamBuffer = ""
         let pendingMsg = ConversationMessage(
             id: pendingId,
             role: .assistant,
@@ -404,74 +414,173 @@ public final class DesktopStore: ObservableObject {
         messages.append(pendingMsg)
         scrollTrigger = UUID()
 
-        // 3. Dispatch to agent client with reasoning level, attachments, and current conversationId
-        client.sendQuery(
+        // 3. Dispatch real incremental streaming query
+        activeStreamTask = client.sendStreamQuery(
             text: text.isEmpty ? "Tolong analisa lampiran berikut." : text,
             source: .text,
             reasoningLevel: reasoningLevel,
             attachments: pendingAttachments.map { $0.url.path },
-            conversationId: selectedConversationId
-        ) { [weak self] result in
-            guard let self else { return }
-            self.isSending = false
-
-            if case .success(let response) = result {
-                if let newConvId = response.conversationId, !newConvId.isEmpty {
-                    self.selectedConversationId = newConvId
-                    if !self.openThreadIds.contains(newConvId) {
-                        self.openThreadIds.append(newConvId)
-                    }
-                    self.recordNavigation(newConvId)
-                }
-                self.newlyArrivedMessageId = pendingId
+            conversationId: selectedConversationId,
+            onChunk: { [weak self] chunk in
+                guard let self = self else { return }
+                self.appendStreamChunk(chunk, messageId: pendingId)
+            },
+            completion: { [weak self] result in
+                guard let self = self else { return }
+                self.finishStreaming(pendingId: pendingId, result: result)
             }
+        )
+    }
 
-            // Update or replace the pending message
-            if let index = self.messages.firstIndex(where: { $0.id == pendingId }) {
-                switch result {
-                case .success(let response):
-                    self.messages[index] = ConversationMessage(
-                        id: pendingId,
+    private func appendStreamChunk(_ chunk: String, messageId: String) {
+        streamBuffer += chunk
+        startFlushTimer(for: messageId)
+    }
+
+    private func startFlushTimer(for messageId: String) {
+        guard streamFlushTimer == nil else { return }
+        streamFlushTimer = Timer.scheduledTimer(withTimeInterval: 0.02, repeats: true) { [weak self] timer in
+            guard let self = self else {
+                timer.invalidate()
+                return
+            }
+            Task { @MainActor [weak self] in
+                self?.flushStreamBuffer(for: messageId)
+            }
+        }
+    }
+
+    private func flushStreamBuffer(for messageId: String) {
+        guard !streamBuffer.isEmpty else {
+            if !isStreaming {
+                streamFlushTimer?.invalidate()
+                streamFlushTimer = nil
+            }
+            return
+        }
+
+        let count = streamBuffer.count
+        let step = max(2, min(count, max(6, count / 4)))
+        let chunk = String(streamBuffer.prefix(step))
+        streamBuffer.removeFirst(step)
+
+        if let index = messages.firstIndex(where: { $0.id == messageId }) {
+            messages[index].text += chunk
+            throttleScroll()
+        }
+    }
+
+    private func throttleScroll() {
+        let now = Date()
+        if now.timeIntervalSince(lastScrollTime) >= 0.08 {
+            lastScrollTime = now
+            scrollTrigger = UUID()
+        }
+    }
+
+    private func finishStreaming(pendingId: String, result: Result<AgentQueryResponse, Error>) {
+        activeStreamTask = nil
+        streamFlushTimer?.invalidate()
+        streamFlushTimer = nil
+
+        // Flush any remaining buffer
+        if !streamBuffer.isEmpty {
+            if let index = messages.firstIndex(where: { $0.id == pendingId }) {
+                messages[index].text += streamBuffer
+            }
+            streamBuffer = ""
+        }
+
+        if case .success(let response) = result {
+            if let newConvId = response.conversationId, !newConvId.isEmpty {
+                self.selectedConversationId = newConvId
+                if !self.openThreadIds.contains(newConvId) {
+                    self.openThreadIds.append(newConvId)
+                }
+                self.recordNavigation(newConvId)
+            }
+        }
+
+        // Update or replace the pending message
+        if let index = self.messages.firstIndex(where: { $0.id == pendingId }) {
+            switch result {
+            case .success(let response):
+                let currentText = self.messages[index].text
+                let finalText = !response.text.isEmpty ? response.text : currentText
+                self.messages[index] = ConversationMessage(
+                    id: pendingId,
+                    role: .assistant,
+                    text: finalText.isEmpty ? "✓ Perintah selesai dijalankan." : finalText,
+                    createdAt: Date().timeIntervalSince1970 * 1000,
+                    taskId: response.taskId,
+                    error: response.error
+                )
+            case .failure(let error):
+                self.banner = error.localizedDescription
+                let currentText = self.messages[index].text
+                self.messages[index] = ConversationMessage(
+                    id: pendingId,
+                    role: .assistant,
+                    text: currentText.isEmpty ? "Gue nggak bisa menghubungi agent server." : currentText,
+                    createdAt: Date().timeIntervalSince1970 * 1000,
+                    taskId: nil,
+                    error: error.localizedDescription
+                )
+            }
+        } else {
+            switch result {
+            case .success(let response):
+                self.messages.append(
+                    ConversationMessage(
+                        id: "assistant-\(UUID().uuidString)",
                         role: .assistant,
                         text: response.text.isEmpty ? "✓ Perintah selesai dijalankan." : response.text,
                         createdAt: Date().timeIntervalSince1970 * 1000,
                         taskId: response.taskId,
                         error: response.error
                     )
-                case .failure(let error):
-                    self.banner = error.localizedDescription
-                    self.messages[index] = ConversationMessage(
-                        id: pendingId,
-                        role: .assistant,
-                        text: "Gue nggak bisa menghubungi agent server.",
-                        createdAt: Date().timeIntervalSince1970 * 1000,
-                        taskId: nil,
-                        error: error.localizedDescription
-                    )
-                }
-            } else {
-                switch result {
-                case .success(let response):
-                    self.messages.append(
-                        ConversationMessage(
-                            id: "assistant-\(UUID().uuidString)",
-                            role: .assistant,
-                            text: response.text.isEmpty ? "✓ Perintah selesai dijalankan." : response.text,
-                            createdAt: Date().timeIntervalSince1970 * 1000,
-                            taskId: response.taskId,
-                            error: response.error
-                        )
-                    )
-                case .failure(let error):
-                    self.banner = error.localizedDescription
-                }
+                )
+            case .failure(let error):
+                self.banner = error.localizedDescription
             }
-
-            self.scrollTrigger = UUID()
-            self.refreshConversations()
-            self.refreshTasks()
-            self.refreshActivity()
         }
+
+        self.isSending = false
+        self.isStreaming = false
+        self.activeStreamingMessageId = nil
+        self.scrollTrigger = UUID()
+        self.refreshConversations()
+        self.refreshTasks()
+        self.refreshActivity()
+    }
+
+    /// Stops the active generation immediately, preserves all already-streamed text,
+    /// cancels the backend LLM task, and removes the blinking caret indicator.
+    public func stopStreaming() {
+        guard isStreaming || isSending else { return }
+        activeStreamTask?.cancel()
+        activeStreamTask = nil
+        streamFlushTimer?.invalidate()
+        streamFlushTimer = nil
+
+        if let id = activeStreamingMessageId, let index = messages.firstIndex(where: { $0.id == id }) {
+            if !streamBuffer.isEmpty {
+                messages[index].text += streamBuffer
+            }
+            streamBuffer = ""
+            if messages[index].text.isEmpty {
+                messages[index].text = "(Response stopped)"
+            }
+        }
+        streamBuffer = ""
+
+        isSending = false
+        isStreaming = false
+        activeStreamingMessageId = nil
+        scrollTrigger = UUID()
+
+        // Inform backend to abort LLM completion
+        client.sendCancel()
     }
 
     public func cancelCurrentTask() {

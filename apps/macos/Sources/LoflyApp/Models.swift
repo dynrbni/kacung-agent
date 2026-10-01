@@ -79,7 +79,7 @@ public struct AnyCodable: Codable {
     }
 }
 
-public struct AgentQueryResponse: Codable {
+public struct AgentQueryResponse: Codable, Sendable {
     public let text: String
     public let completed: Bool
     public let error: String?

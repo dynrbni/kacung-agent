@@ -31,8 +31,20 @@ export class MockLLMProvider implements LLMProvider {
   }
 
   public async complete(options: LLMCompletionOptions): Promise<LLMCompletionResponse> {
+    const streamContentIfRequested = (text: string | null | undefined) => {
+      if (!text || !options.onChunk) return;
+      const chunks = text.split(/(?<=\s+)/);
+      for (const chunk of chunks) {
+        if (options.signal?.aborted) break;
+        options.onChunk(chunk);
+      }
+    };
+
     if (this.cannedResponses.length > 0 && this.stepIndex < this.cannedResponses.length) {
       const step = this.cannedResponses[this.stepIndex++];
+      if (!step.toolCalls || step.toolCalls.length === 0) {
+        streamContentIfRequested(step.content);
+      }
       return {
         content: step.content || null,
         toolCalls: step.toolCalls,
@@ -45,8 +57,10 @@ export class MockLLMProvider implements LLMProvider {
       .pop()?.content?.toLowerCase() || '';
 
     if (lastUserMessage.includes('jam') || lastUserMessage.includes('time')) {
+      const text = `Sekarang jam ${new Date().toLocaleTimeString('id-ID')}, bos. Ada lagi yang bisa Lofly bantu?`;
+      streamContentIfRequested(text);
       return {
-        content: `Sekarang jam ${new Date().toLocaleTimeString('id-ID')}, bos. Ada lagi yang bisa Lofly bantu?`,
+        content: text,
       };
     }
 
@@ -76,8 +90,10 @@ export class MockLLMProvider implements LLMProvider {
       };
     }
 
+    const defaultText = 'Halo bos! Lofly siap membantu tugas apa saja di Mac Anda.';
+    streamContentIfRequested(defaultText);
     return {
-      content: 'Halo bos! Lofly siap membantu tugas apa saja di Mac Anda.',
+      content: defaultText,
     };
   }
 }

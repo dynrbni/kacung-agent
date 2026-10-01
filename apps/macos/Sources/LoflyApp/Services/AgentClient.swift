@@ -235,6 +235,105 @@ public final class AgentClient: ObservableObject {
         }.resume()
     }
 
+    /// Real-time incremental streaming query using Server-Sent Events (SSE).
+    /// Delivers small token chunks continuously as the LLM generates them.
+    @discardableResult
+    public func sendStreamQuery(
+        text: String,
+        source: QuerySource = .text,
+        reasoningLevel: String = "medium",
+        attachments: [String] = [],
+        conversationId: String? = nil,
+        onChunk: @escaping (String) -> Void,
+        completion: @escaping (Result<AgentQueryResponse, Error>) -> Void
+    ) -> Task<Void, Never> {
+        let endpoint = baseURL.appendingPathComponent("query")
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = 180.0
+
+        var payload: [String: Any] = [
+            "text": text,
+            "source": source.rawValue,
+            "reasoningLevel": reasoningLevel,
+            "attachments": attachments,
+            "stream": true
+        ]
+        if let conversationId = conversationId, !conversationId.isEmpty {
+            payload["conversationId"] = conversationId
+        }
+        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+
+        return Task {
+            do {
+                let (bytes, response) = try await urlSession.bytes(for: request)
+                if let httpRes = response as? HTTPURLResponse, httpRes.statusCode != 200 {
+                    throw NSError(
+                        domain: "AgentClient",
+                        code: httpRes.statusCode,
+                        userInfo: [NSLocalizedDescriptionKey: "Server returned status \(httpRes.statusCode)"]
+                    )
+                }
+
+                var fullText = ""
+                var completed = true
+                var errorString: String? = nil
+                var taskId: String? = nil
+                var returnConvId: String? = nil
+
+                for try await line in bytes.lines {
+                    if Task.isCancelled { break }
+                    let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard trimmed.hasPrefix("data: ") else { continue }
+                    let jsonText = String(trimmed.dropFirst(6))
+                    guard let jsonData = jsonText.data(using: .utf8),
+                          let event = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+                          let type = event["type"] as? String else {
+                        continue
+                    }
+
+                    if type == "chunk", let chunk = event["text"] as? String {
+                        fullText += chunk
+                        DispatchQueue.main.async {
+                            onChunk(chunk)
+                        }
+                    } else if type == "done" {
+                        completed = (event["completed"] as? Bool) ?? true
+                        errorString = event["error"] as? String
+                        taskId = event["taskId"] as? String
+                        returnConvId = event["conversationId"] as? String
+                        if let doneText = event["text"] as? String, !doneText.isEmpty {
+                            fullText = doneText
+                        }
+                    } else if type == "error" {
+                        errorString = event["error"] as? String ?? "Stream error"
+                    }
+                }
+
+                if !Task.isCancelled {
+                    let agentResponse = AgentQueryResponse(
+                        text: fullText,
+                        completed: completed,
+                        error: errorString,
+                        taskId: taskId,
+                        conversationId: returnConvId
+                    )
+                    DispatchQueue.main.async {
+                        completion(.success(agentResponse))
+                    }
+                }
+            } catch {
+                if !Task.isCancelled {
+                    DispatchQueue.main.async {
+                        completion(.failure(error))
+                    }
+                }
+            }
+        }
+    }
+
     public func sendAudioFile(url: URL, completion: @escaping (Result<AgentQueryResponse, Error>) -> Void) {
         let endpoint = baseURL.appendingPathComponent("audio")
         var request = URLRequest(url: endpoint)
