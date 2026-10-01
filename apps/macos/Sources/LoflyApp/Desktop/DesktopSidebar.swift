@@ -15,7 +15,7 @@ struct DesktopSidebar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             wordmark
-                .frame(height: 44)
+                .frame(height: 52)
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
@@ -59,39 +59,24 @@ struct DesktopSidebar: View {
             Spacer(minLength: 4)
 
             // Search toggle
-            Button(action: {
+            GlassButton(
+                icon: "magnifyingglass",
+                iconSize: 12,
+                help: "Search chats"
+            ) {
                 withAnimation(.easeInOut(duration: 0.18)) {
                     isSearchVisible.toggle()
                 }
-            }) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 12))
-                    .foregroundStyle(isSearchVisible ? LoflyTheme.primaryText : LoflyTheme.secondaryText)
-                    .frame(width: 26, height: 26)
-                    .background(
-                        RoundedRectangle(cornerRadius: LoflyTheme.Radius.small, style: .continuous)
-                            .fill(isSearchVisible ? LoflyTheme.subtleFill : Color.clear)
-                    )
             }
-            .buttonStyle(.plain)
-            .help("Search chats")
-            .accessibilityLabel("Search")
 
             // Collapse sidebar button
-            Button(action: { store.toggleSidebar() }) {
-                Image(systemName: "sidebar.leading")
-                    .font(.system(size: 12))
-                    .foregroundStyle(LoflyTheme.secondaryText)
-                    .frame(width: 26, height: 26)
-                    .background(
-                        RoundedRectangle(cornerRadius: LoflyTheme.Radius.small, style: .continuous)
-                            .fill(Color.clear)
-                    )
-                    .contentShape(Rectangle())
+            GlassButton(
+                icon: "sidebar.leading",
+                iconSize: 12,
+                help: "Close sidebar"
+            ) {
+                store.toggleSidebar()
             }
-            .buttonStyle(.plain)
-            .help("Close sidebar")
-            .accessibilityLabel("Close sidebar")
         }
         .padding(.trailing, 8)
     }

@@ -1,188 +1,272 @@
 import SwiftUI
 import AppKit
 
-/// Restrained native macOS toolbar:
-/// - Compact height (42pt) that visually blends into the window
-/// - Traffic lights clearance and navigation controls
-/// - Thread tabs allowing rapid switching between conversations
-/// - Seamless graphite styling with subtle borders and states
+/// Redesigned macOS toolbar inspired by Codex:
+/// - Clean centered conversation title
+/// - Glass-effect navigation and action buttons
+/// - Proper traffic lights clearance
+/// - Minimal, balanced layout with generous spacing
 public struct DesktopTopBar: View {
     @EnvironmentObject private var store: DesktopStore
+    @State private var isHoveringMore = false
+    @State private var isHoveringThreads = false
 
     public init() {}
 
     public var body: some View {
-        HStack(spacing: 8) {
+        ZStack {
+            // Centered title
+            centeredTitle
+
+            // Left controls
+            HStack(spacing: 0) {
+                leftControls
+                Spacer()
+            }
+
+            // Right controls
+            HStack(spacing: 0) {
+                Spacer()
+                rightControls
+            }
+        }
+        .frame(height: 52)
+        .padding(.horizontal, 14)
+        .background(topBarBackground)
+    }
+
+    // MARK: - Top Bar Background
+
+    private var topBarBackground: some View {
+        ZStack {
+            LoflyTheme.contentBackground
+            // Subtle glass overlay at the top
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.015),
+                    Color.clear
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+    }
+
+    // MARK: - Left Controls (Sidebar Toggle + Nav)
+
+    private var leftControls: some View {
+        HStack(spacing: 6) {
             if !store.isSidebarVisible {
-                // When sidebar is collapsed, traffic lights sit at top-left of this bar
+                // Traffic lights clearance when sidebar is hidden
                 Spacer()
                     .frame(width: 76)
 
-                Button(action: { store.toggleSidebar() }) {
-                    Image(systemName: "sidebar.leading")
-                        .font(.system(size: 12))
-                        .foregroundStyle(LoflyTheme.secondaryText)
-                        .frame(width: 26, height: 26)
-                        .background(
-                            RoundedRectangle(cornerRadius: LoflyTheme.Radius.small, style: .continuous)
-                                .fill(Color.clear)
-                        )
-                        .contentShape(Rectangle())
+                GlassButton(
+                    icon: "sidebar.leading",
+                    help: "Open sidebar"
+                ) {
+                    store.toggleSidebar()
                 }
-                .buttonStyle(.plain)
-                .help("Open sidebar")
-                .accessibilityLabel("Open sidebar")
-
-                navButtons
-
-                Rectangle()
-                    .fill(LoflyTheme.separator)
-                    .frame(width: 1, height: 14)
-                    .padding(.horizontal, 2)
-            } else {
-                navButtons
-                    .padding(.leading, 10)
-
-                Rectangle()
-                    .fill(LoflyTheme.separator)
-                    .frame(width: 1, height: 14)
-                    .padding(.horizontal, 2)
             }
 
-            // Thread Tabs Bar
-            threadTabsBar
-
-            Spacer(minLength: 8)
+            // Navigation back/forward in a glass pill
+            navPill
         }
-        .frame(height: 42)
-        .padding(.horizontal, 8)
-        .background(LoflyTheme.contentBackground)
+        .padding(.leading, store.isSidebarVisible ? 6 : 0)
     }
 
-    private var navButtons: some View {
-        HStack(spacing: 2) {
+    // MARK: - Navigation Pill (Back / Forward)
+
+    private var navPill: some View {
+        HStack(spacing: 0) {
             Button(action: { store.goBack() }) {
                 Image(systemName: "chevron.backward")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(store.canGoBack ? LoflyTheme.primaryText : LoflyTheme.secondaryText.opacity(0.35))
-                    .frame(width: 24, height: 24)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(store.canGoBack ? LoflyTheme.primaryText.opacity(0.85) : LoflyTheme.tertiaryText.opacity(0.45))
+                    .frame(width: 30, height: 28)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(!store.canGoBack)
             .help("Back")
 
+            // Subtle divider inside the pill
+            Rectangle()
+                .fill(Color.white.opacity(0.06))
+                .frame(width: 1, height: 14)
+
             Button(action: { store.goForward() }) {
                 Image(systemName: "chevron.forward")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(store.canGoForward ? LoflyTheme.primaryText : LoflyTheme.secondaryText.opacity(0.35))
-                    .frame(width: 24, height: 24)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(store.canGoForward ? LoflyTheme.primaryText.opacity(0.85) : LoflyTheme.tertiaryText.opacity(0.45))
+                    .frame(width: 30, height: 28)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(!store.canGoForward)
             .help("Forward")
         }
+        .background(GlassPillBackground())
     }
 
-    // MARK: - Thread Tabs
+    // MARK: - Centered Title
+
+    private var centeredTitle: some View {
+        HStack(spacing: 0) {
+            let title = currentTitle
+            Text(title)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(LoflyTheme.primaryText.opacity(0.9))
+                .lineLimit(1)
+                .frame(maxWidth: 360)
+                .animation(.easeInOut(duration: 0.2), value: title)
+        }
+    }
+
+    private var currentTitle: String {
+        if let convId = store.selectedConversationId,
+           let conv = store.conversations.first(where: { $0.id == convId }) {
+            return conv.title
+        }
+        return "New chat"
+    }
+
+    // MARK: - Right Controls
+
+    private var rightControls: some View {
+        HStack(spacing: 6) {
+            // Thread switcher dropdown
+            threadSwitcher
+
+            // More menu button
+            GlassButton(icon: "ellipsis", help: "More options") {
+                // Future: show context menu
+            }
+        }
+        .padding(.trailing, 2)
+    }
+
+    // MARK: - Thread Switcher (Compact Dropdown Style)
 
     @ViewBuilder
-    private var threadTabsBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 5) {
-                if store.openThreadIds.isEmpty && store.selectedConversationId == nil {
-                    activeDraftTab
-                } else {
-                    ForEach(store.openThreadIds, id: \.self) { threadId in
-                        threadTab(threadId: threadId)
-                    }
+    private var threadSwitcher: some View {
+        if !store.openThreadIds.isEmpty || store.selectedConversationId != nil {
+            Menu {
+                // New thread at the top
+                Button {
+                    store.newConversation()
+                } label: {
+                    Label("New thread", systemImage: "plus")
+                }
 
-                    if store.selectedConversationId == nil {
-                        activeDraftTab
+                Divider()
+
+                // List of open threads
+                ForEach(store.openThreadIds, id: \.self) { threadId in
+                    let conv = store.conversations.first(where: { $0.id == threadId })
+                    let title = conv?.title ?? "Chat"
+                    let isSelected = store.selectedConversationId == threadId
+
+                    Button {
+                        store.selectConversation(threadId)
+                    } label: {
+                        HStack {
+                            Text(title)
+                            if isSelected {
+                                Spacer()
+                                Image(systemName: "checkmark")
+                            }
+                        }
                     }
                 }
 
-                // Plus / New thread button
-                Button(action: { store.newConversation() }) {
-                    Image(systemName: "plus")
+                if store.openThreadIds.count > 1 {
+                    Divider()
+
+                    Button("Close other threads") {
+                        if let current = store.selectedConversationId {
+                            for id in store.openThreadIds where id != current {
+                                store.closeThread(id)
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "square.stack")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(LoflyTheme.secondaryText)
-                        .frame(width: 24, height: 24)
-                        .background(
-                            RoundedRectangle(cornerRadius: LoflyTheme.Radius.small, style: .continuous)
-                                .fill(LoflyTheme.subtleFill)
-                        )
+                    Text("\(max(1, store.openThreadIds.count))")
+                        .font(.system(size: 11, weight: .semibold))
+                        .monospacedDigit()
                 }
-                .buttonStyle(.plain)
-                .help("New thread")
-                .accessibilityLabel("New thread")
+                .foregroundStyle(LoflyTheme.secondaryText)
+                .frame(height: 28)
+                .padding(.horizontal, 10)
+                .background(GlassPillBackground())
             }
-            .padding(.vertical, 3)
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Switch threads")
+        } else {
+            // Single new chat — show a small + button to start a thread
+            GlassButton(icon: "plus", help: "New thread") {
+                store.newConversation()
+            }
         }
     }
+}
 
-    private var activeDraftTab: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "sparkle")
-                .font(.system(size: 9.5, weight: .semibold))
-                .foregroundStyle(LoflyTheme.accent)
-            Text("New thread")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(LoflyTheme.primaryText)
+// MARK: - Glass Button Component
+
+/// A single icon button with a frosted glass background effect,
+/// matching Codex's elevated button aesthetic.
+struct GlassButton: View {
+    let icon: String
+    var iconSize: CGFloat = 12
+    var help: String = ""
+    var action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: iconSize, weight: .medium))
+                .foregroundStyle(isHovering ? LoflyTheme.primaryText.opacity(0.9) : LoflyTheme.secondaryText)
+                .frame(width: 30, height: 28)
+                .background(
+                    GlassPillBackground(isHovering: isHovering)
+                )
+                .contentShape(Rectangle())
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 4)
-        .background(
-            RoundedRectangle(cornerRadius: LoflyTheme.Radius.small, style: .continuous)
-                .fill(LoflyTheme.selectedFill)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: LoflyTheme.Radius.small, style: .continuous)
-                .stroke(LoflyTheme.borderSubtle, lineWidth: 0.5)
-        )
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .help(help)
     }
+}
 
-    private func threadTab(threadId: String) -> some View {
-        let isSelected = store.selectedConversationId == threadId
-        let conv = store.conversations.first(where: { $0.id == threadId })
-        let title = conv?.title ?? "Chat"
+// MARK: - Glass Pill Background
 
-        return HStack(spacing: 5) {
-            Button {
-                store.selectConversation(threadId)
-            } label: {
-                Text(title)
-                    .font(.system(size: 12, weight: isSelected ? .medium : .regular))
-                    .foregroundStyle(isSelected ? LoflyTheme.primaryText : LoflyTheme.secondaryText)
-                    .lineLimit(1)
-                    .frame(maxWidth: 160)
-                    .id("title-\(threadId)-\(title)")
-                    .animation(.spring(response: 0.35, dampingFraction: 0.78), value: title)
-            }
-            .buttonStyle(.plain)
+/// Frosted glass pill background used by top bar buttons.
+/// Creates a subtle elevated, translucent surface effect.
+struct GlassPillBackground: View {
+    var isHovering: Bool = false
 
-            Button {
-                store.closeThread(threadId)
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 8.5, weight: .semibold))
-                    .foregroundStyle(isSelected ? LoflyTheme.secondaryText : LoflyTheme.tertiaryText)
-                    .frame(width: 14, height: 14)
-            }
-            .buttonStyle(.plain)
-            .help("Close thread")
-        }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 4)
-        .background(
-            RoundedRectangle(cornerRadius: LoflyTheme.Radius.small, style: .continuous)
-                .fill(isSelected ? LoflyTheme.selectedFill : Color.clear)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: LoflyTheme.Radius.small, style: .continuous)
-                .stroke(isSelected ? LoflyTheme.borderSubtle : Color.clear, lineWidth: 0.5)
-        )
-        .contentShape(Rectangle())
+    var body: some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(
+                .ultraThinMaterial
+            )
+            .opacity(isHovering ? 1.0 : 0.6)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.white.opacity(isHovering ? 0.06 : 0.025))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.white.opacity(isHovering ? 0.12 : 0.06), lineWidth: 0.5)
+            )
+            .animation(.easeInOut(duration: 0.15), value: isHovering)
     }
 }
