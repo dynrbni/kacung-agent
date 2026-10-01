@@ -15,65 +15,77 @@ public struct DesktopTopBar: View {
 
     public var body: some View {
         HStack(spacing: 8) {
-            // Traffic lights clearance
-            Spacer()
-                .frame(width: 72)
+            if !store.isSidebarVisible {
+                // When sidebar is collapsed, traffic lights sit at top-left of this bar
+                Spacer()
+                    .frame(width: 76)
 
-            // Back & Forward Navigation
-            HStack(spacing: 2) {
-                Button(action: { store.goBack() }) {
-                    Image(systemName: "chevron.backward")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(store.canGoBack ? Color.primary : Color.secondary.opacity(0.4))
-                        .frame(width: 26, height: 26)
+                navButtons
+
+                Button(action: { store.toggleSidebar() }) {
+                    Image(systemName: "sidebar.leading")
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(Color.secondary)
+                        .frame(width: 28, height: 28)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(Color.clear)
+                        )
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .disabled(!store.canGoBack)
-                .help("Back")
+                .help("Buka sidebar")
+                .accessibilityLabel("Open sidebar")
 
-                Button(action: { store.goForward() }) {
-                    Image(systemName: "chevron.forward")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(store.canGoForward ? Color.primary : Color.secondary.opacity(0.4))
-                        .frame(width: 26, height: 26)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .disabled(!store.canGoForward)
-                .help("Forward")
+                Rectangle()
+                    .fill(LoflyTheme.separator.opacity(0.6))
+                    .frame(width: 1, height: 16)
+                    .padding(.horizontal, 2)
+            } else {
+                // When sidebar is visible, traffic lights sit in the sidebar header
+                navButtons
+                    .padding(.leading, 12)
+
+                Rectangle()
+                    .fill(LoflyTheme.separator.opacity(0.6))
+                    .frame(width: 1, height: 16)
+                    .padding(.horizontal, 2)
             }
-
-            // Sidebar Toggle Button
-            Button(action: { store.toggleSidebar() }) {
-                Image(systemName: "sidebar.leading")
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(store.isSidebarVisible ? Color.primary : Color.secondary)
-                    .frame(width: 28, height: 28)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(store.isSidebarVisible ? Color.primary.opacity(0.08) : Color.clear)
-                    )
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help(store.isSidebarVisible ? "Tutup sidebar" : "Buka sidebar")
-            .accessibilityLabel("Toggle sidebar")
-
-            // Divider
-            Rectangle()
-                .fill(LoflyTheme.separator.opacity(0.6))
-                .frame(width: 1, height: 16)
-                .padding(.horizontal, 2)
 
             // Thread Tabs Bar
             threadTabsBar
 
             Spacer(minLength: 8)
         }
-        .frame(height: 40)
+        .frame(height: 48)
         .padding(.horizontal, 8)
         .background(LoflyTheme.surface)
+    }
+
+    private var navButtons: some View {
+        HStack(spacing: 2) {
+            Button(action: { store.goBack() }) {
+                Image(systemName: "chevron.backward")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(store.canGoBack ? Color.primary : Color.secondary.opacity(0.4))
+                    .frame(width: 26, height: 26)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!store.canGoBack)
+            .help("Back")
+
+            Button(action: { store.goForward() }) {
+                Image(systemName: "chevron.forward")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(store.canGoForward ? Color.primary : Color.secondary.opacity(0.4))
+                    .frame(width: 26, height: 26)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!store.canGoForward)
+            .help("Forward")
+        }
     }
 
     // MARK: - Thread Tabs

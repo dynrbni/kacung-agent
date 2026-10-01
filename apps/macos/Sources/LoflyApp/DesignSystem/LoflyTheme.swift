@@ -351,24 +351,25 @@ public struct LoflySidebarRow<Content: View>: View {
 
     public var body: some View {
         Button(action: action) {
-            HStack(spacing: LoflyTheme.Space.s) {
+            HStack(spacing: 10) {
                 if let symbol {
                     Image(systemName: symbol)
-                        .font(.system(size: LoflyTheme.Size.callout))
-                        .frame(width: 16)
+                        .font(.system(size: 14))
+                        .frame(width: 18)
                         .foregroundStyle(isSelected ? LoflyTheme.accent : Color.secondary)
                 }
                 Text(title)
-                    .font(LoflyTheme.body(LoflyTheme.Size.body))
+                    .font(.system(size: 13.5, weight: isSelected ? .medium : .regular))
+                    .foregroundStyle(isSelected ? Color.primary : Color.primary.opacity(0.88))
                     .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer(minLength: LoflyTheme.Space.xs)
+                    .truncationMode(.tail)
+                Spacer(minLength: 4)
                 content
             }
-            .padding(.horizontal, LoflyTheme.Space.m)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 10)
+            .frame(height: symbol != nil ? 36 : 34)
             .background(
-                RoundedRectangle(cornerRadius: LoflyTheme.Radius.medium, style: .continuous)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(background)
             )
             .contentShape(Rectangle())
@@ -378,11 +379,10 @@ public struct LoflySidebarRow<Content: View>: View {
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 
-    /// Selection outranks hover, so the active row never looks like a row the
-    /// pointer merely happens to be over.
+    /// Selection outranks hover, matching ChatGPT's neutral elevated pill background.
     private var background: Color {
-        if isSelected { return LoflyTheme.accent.opacity(0.14) }
-        if isHovering { return LoflyTheme.subtleFill.opacity(0.35) }
+        if isSelected { return Color.primary.opacity(0.12) }
+        if isHovering { return Color.primary.opacity(0.06) }
         return .clear
     }
 }

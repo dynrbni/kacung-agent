@@ -85,19 +85,19 @@ public struct DesktopRootView: View {
     public init() {}
 
     public var body: some View {
-        VStack(spacing: 0) {
-            DesktopTopBar()
+        HStack(spacing: 0) {
+            if store.isSidebarVisible {
+                DesktopSidebar()
+                    .frame(width: 260)
+                    .transition(.move(edge: .leading).combined(with: .opacity))
 
-            LoflySeparator(.horizontal)
+                LoflySeparator(.vertical)
+            }
 
-            HStack(spacing: 0) {
-                if store.isSidebarVisible {
-                    DesktopSidebar()
-                        .frame(width: LoflyTheme.sidebarWidth)
-                        .transition(.move(edge: .leading).combined(with: .opacity))
+            VStack(spacing: 0) {
+                DesktopTopBar()
 
-                    LoflySeparator(.vertical)
-                }
+                LoflySeparator(.horizontal)
 
                 detail
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
