@@ -6,9 +6,9 @@ import type {
   ConfirmationResponse,
   LLMProvider,
   TextToSpeechProvider,
-} from '@lafly/types';
-import { getConfig, type LaflyConfig } from '@lafly/config';
-import { ToolExecutor } from '@lafly/tools';
+} from '@lafly/types';import { getConfig, type LaflyConfig } from '@lafly/config';
+import type { IntegrationDescriptor, ToolCallRequest, AgentRunResult } from '@lafly/types';
+import { ToolExecutor, getToolSafety } from '@lafly/tools';
 import {
   AgentRuntime,
   StructuredLogger,
@@ -18,7 +18,19 @@ import {
   MockLLMProvider,
   MacOSSayTTSProvider,
   MockTTSProvider,
+  FileConversationStore,
+  FileMemoryStore,
+  TaskManager,
+  ActivityLog,
+  SettingsStore,
+  AccountStore,
+  describeIntegrations,
+  humanizeToolName,
 } from '@lafly/core';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 
 export interface LaflyAppOptions {
   config?: LaflyConfig;
@@ -33,6 +45,18 @@ export class LaflyAgentApp {
   public executor: ToolExecutor;
   public httpServer: http.Server;
   public wss: WebSocketServer;
+
+  /** Shared state consumed by both the notch and the desktop app. */
+  public conversations: FileConversationStore;
+  public memory: FileMemoryStore;
+  public tasks: TaskManager;
+  public activity: ActivityLog;
+  public settings: SettingsStore;
+  public account: AccountStore;
+
+  private currentConversationId: string | null = null;
+  private currentTaskId: string | null = null;
+  private integrationProbeCache: { at: number; value: IntegrationDescriptor[] } | null = null;
 
   private pendingConfirmations = new Map<
     string,
@@ -70,12 +94,32 @@ export class LaflyAgentApp {
       assistantName: this.config.assistant.name,
     });
 
-    // 5. Create HTTP & WebSocket Servers
+    // 5. Shared stores backing the desktop control center
+    this.conversations = new FileConversationStore();
+    this.memory = new FileMemoryStore();
+    this.tasks = new TaskManager();
+    this.activity = new ActivityLog();
+    this.settings = new SettingsStore();
+    this.account = new AccountStore();
+
+    // 6. Create HTTP & WebSocket Servers
     this.httpServer = http.createServer((req, res) => this.handleHttpRequest(req, res));
     this.wss = new WebSocketServer({ server: this.httpServer, path: '/ws' });
 
     this.setupWebSocket();
     this.setupRuntimeEvents();
+    this.setupTaskBroadcast();
+  }
+
+  /** Pushes every task state change to all surfaces over the shared socket. */
+  private setupTaskBroadcast(): void {
+    this.tasks.subscribe((task) => {
+      this.broadcast({ type: 'task_update', payload: task, timestamp: Date.now() });
+    });
+  }
+
+  public getConversationId(): string | null {
+    return this.currentConversationId;
   }
 
   private resolveLLMProvider(): LLMProvider {
@@ -201,6 +245,71 @@ export class LaflyAgentApp {
   private setupRuntimeEvents(): void {
     this.runtime.onEvent((event) => {
       this.broadcast(event);
+
+      // Fold runtime events into the authoritative task record so the notch and
+      // the desktop app render the same progress from the same source.
+      if (event.type === 'tool_start') {
+        const payload = event.payload as {
+          toolName?: string;
+          parameters?: Record<string, unknown>;
+          callId?: string;
+        };
+        if (this.currentTaskId && payload.toolName) {
+          // The call id is the exact correlation key: the fast router announces
+          // a batch and then each call, and parallel runs reuse one tool name.
+          this.tasks.addStep(this.currentTaskId, {
+            id: payload.callId || `step_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            label: humanizeToolName(payload.toolName, payload.parameters || {}),
+            state: 'running',
+            toolName: payload.toolName,
+          });
+        }
+      }
+
+      if (event.type === 'tool_end') {
+        const payload = event.payload as {
+          toolName?: string;
+          success?: boolean;
+          error?: string;
+          callId?: string;
+        };
+        if (this.currentTaskId && payload.toolName) {
+          const stepId = payload.callId;
+          let label: string | undefined;
+
+          if (stepId) {
+            const task = this.tasks.get(this.currentTaskId);
+            const step = task?.steps.find((s) => s.id === stepId);
+            if (step) {
+              this.tasks.updateStep(
+                this.currentTaskId,
+                stepId,
+                payload.success ? 'completed' : 'failed',
+                payload.error
+              );
+              // Reuse the label captured at tool_start; tool_end carries no
+              // parameters, so the target would otherwise be lost.
+              label = step.label;
+            }
+          }
+
+          // Activity records what happened, including whether the policy
+          // suppressed the side effect entirely.
+          const safety = getToolSafety(this.executor.getRegistry().get(payload.toolName)?.safety);
+          const policy = this.executor.getPolicy();
+          const simulated = policy.mode !== 'live' && safety.sideEffect !== 'none';
+
+          this.activity.record({
+            label: label || humanizeToolName(payload.toolName),
+            toolName: payload.toolName,
+            status: simulated ? 'simulated' : payload.success ? 'success' : 'failure',
+            taskId: this.currentTaskId || undefined,
+            conversationId: this.currentConversationId || undefined,
+            detail: simulated ? `Suppressed by ${policy.mode} policy — no external side effect.` : payload.error,
+            dryRun: simulated,
+          });
+        }
+      }
     });
   }
 
@@ -350,8 +459,11 @@ export class LaflyAgentApp {
           return;
         }
 
-        const result = await this.runtime.handleTranscript(text);
-        sendJson(200, result);
+        const { result, taskId } = await this.runTracked(
+          text,
+          `chat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`
+        );
+        sendJson(200, { ...result, taskId });
       } catch (err) {
         sendJson(500, { error: String(err) });
       }
@@ -431,8 +543,10 @@ export class LaflyAgentApp {
         }
 
         this.logger.info(`Audio transcribed to: "${transcript}"`);
-        const agentResult = await this.runtime.handleTranscript(transcript);
-        sendJson(200, agentResult);
+        // Voice and text share one pipeline, so a spoken command is tracked as
+        // a task and lands in the same conversation history.
+        const { result: agentResult, taskId } = await this.runTracked(transcript, `voice_${Date.now()}`);
+        sendJson(200, { ...agentResult, taskId });
       } catch (err) {
         sendJson(500, { error: String(err) });
       }
@@ -454,7 +568,315 @@ export class LaflyAgentApp {
       return;
     }
 
+    // ───────────────────────────────────────────────────────────────────────
+    // Desktop control center
+    // ───────────────────────────────────────────────────────────────────────
+
+    // Conversations
+    if (req.method === 'GET' && pathname === '/conversations') {
+      const q = url.searchParams.get('q');
+      const list = q ? await this.conversations.search(q) : await this.conversations.list();
+      // The list view omits message bodies to keep the sidebar payload small.
+      sendJson(200, {
+        conversations: list.map(({ messages, ...rest }) => ({
+          ...rest,
+          messageCount: messages.length,
+        })),
+        activeConversationId: this.currentConversationId,
+      });
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/conversations') {
+      const body = await readBody();
+      const created = await this.conversations.create(
+        typeof body.title === 'string' ? body.title : undefined
+      );
+      this.currentConversationId = created.id;
+      this.runtime.resetConversation();
+      sendJson(200, { success: true, conversation: created });
+      return;
+    }
+
+    const conversationMatch = pathname.match(/^\/conversations\/([^/]+)$/);
+    if (conversationMatch) {
+      const id = decodeURIComponent(conversationMatch[1]);
+
+      if (req.method === 'GET') {
+        const conversation = await this.conversations.get(id);
+        if (!conversation) {
+          sendJson(404, { error: `Conversation "${id}" not found.` });
+          return;
+        }
+        this.currentConversationId = id;
+        sendJson(200, { conversation });
+        return;
+      }
+
+      if (req.method === 'DELETE') {
+        const deleted = await this.conversations.delete(id);
+        if (this.currentConversationId === id) {
+          this.currentConversationId = null;
+        }
+        sendJson(200, { success: deleted });
+        return;
+      }
+
+      if (req.method === 'PATCH') {
+        const body = await readBody();
+        const updated = await this.conversations.updateTitle(
+          id,
+          typeof body.title === 'string' ? body.title : ''
+        );
+        if (!updated) {
+          sendJson(404, { error: `Conversation "${id}" not found.` });
+          return;
+        }
+        sendJson(200, { success: true, conversation: updated });
+        return;
+      }
+    }
+
+    // Tasks
+    if (req.method === 'GET' && pathname === '/tasks') {
+      sendJson(200, {
+        tasks: this.tasks.list(),
+        activeTask: this.tasks.active(),
+      });
+      return;
+    }
+
+    const taskCancelMatch = pathname.match(/^\/tasks\/([^/]+)\/cancel$/);
+    if (req.method === 'POST' && taskCancelMatch) {
+      const cancelled = this.runtime.cancelCurrentTask();
+      const task = this.tasks.cancel(decodeURIComponent(taskCancelMatch[1]));
+      sendJson(200, { success: cancelled, task });
+      return;
+    }
+
+    const MEMORY_CATEGORIES = ['preference', 'fact', 'project', 'instruction'] as const;
+    const readCategory = (value: unknown, fallback: (typeof MEMORY_CATEGORIES)[number]) =>
+      MEMORY_CATEGORIES.includes(value as (typeof MEMORY_CATEGORIES)[number])
+        ? (value as (typeof MEMORY_CATEGORIES)[number])
+        : fallback;
+
+    // Memory
+    if (req.method === 'GET' && pathname === '/memory') {
+      const category = url.searchParams.get('category') || undefined;
+      const items = category ? await this.memory.search('', category) : await this.memory.list();
+      sendJson(200, { memory: items });
+      return;
+    }
+
+    const memoryMatch = pathname.match(/^\/memory\/([^/]+)$/);
+    if (memoryMatch) {
+      const id = decodeURIComponent(memoryMatch[1]);
+
+      if (req.method === 'DELETE') {
+        const deleted = await this.memory.delete(id);
+        sendJson(deleted ? 200 : 404, { success: deleted });
+        return;
+      }
+
+      if (req.method === 'PATCH') {
+        const body = await readBody();
+        const existing = await this.memory.get(id);
+        if (!existing) {
+          sendJson(404, { error: `Memory "${id}" not found.` });
+          return;
+        }
+        if (typeof body.content === 'string') {
+          await this.memory.delete(id);
+          const replaced = await this.memory.save({
+            category: readCategory(body.category, existing.category),
+            content: body.content,
+            metadata: existing.metadata,
+          });
+          sendJson(200, { success: true, memory: replaced });
+          return;
+        }
+        sendJson(200, { success: true, memory: existing });
+        return;
+      }
+    }
+
+    if (req.method === 'POST' && pathname === '/memory') {
+      const body = await readBody();
+      if (typeof body.content !== 'string' || !body.content.trim()) {
+        sendJson(400, { error: 'content is required' });
+        return;
+      }
+      const saved = await this.memory.save({
+        category: readCategory(body.category, 'fact'),
+        content: body.content,
+      });
+      sendJson(200, { success: true, memory: saved });
+      return;
+    }
+
+    if (req.method === 'DELETE' && pathname === '/memory') {
+      for (const item of await this.memory.list()) {
+        await this.memory.delete(item.id);
+      }
+      sendJson(200, { success: true });
+      return;
+    }
+
+    // Activity
+    if (req.method === 'GET' && pathname === '/activity') {
+      const limitParam = url.searchParams.get('limit');
+      const sinceParam = url.searchParams.get('since');
+      sendJson(200, {
+        activity: this.activity.list({
+          limit: limitParam ? parseInt(limitParam, 10) : undefined,
+          since: sinceParam ? parseInt(sinceParam, 10) : undefined,
+        }),
+      });
+      return;
+    }
+
+    if (req.method === 'DELETE' && pathname === '/activity') {
+      this.activity.clear();
+      sendJson(200, { success: true });
+      return;
+    }
+
+    // Integrations
+    if (req.method === 'GET' && pathname === '/integrations') {
+      sendJson(200, { integrations: await this.probeIntegrations() });
+      return;
+    }
+
+    // Settings
+    if (req.method === 'GET' && pathname === '/settings') {
+      sendJson(200, { settings: this.settings.get() });
+      return;
+    }
+
+    if (req.method === 'PATCH' && pathname === '/settings') {
+      const body = await readBody();
+      sendJson(200, { success: true, settings: this.settings.update(body) });
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/settings/reset') {
+      sendJson(200, { success: true, settings: this.settings.reset() });
+      return;
+    }
+
+    // Account
+    if (req.method === 'GET' && pathname === '/account') {
+      sendJson(200, { account: this.account.get() });
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/account/sign-in') {
+      const body = await readBody();
+      sendJson(200, { success: true, account: this.account.signIn(String(body.displayName || '')) });
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/account/sign-out') {
+      sendJson(200, { success: true, account: this.account.signOut() });
+      return;
+    }
+
     sendJson(404, { error: `Route not found: ${req.method} ${pathname}` });
+  }
+
+  /**
+   * Probes installed applications once and caches briefly, so opening the
+   * Integrations screen does not spawn a shell per row.
+   */
+  private async probeIntegrations(): Promise<IntegrationDescriptor[]> {
+    const CACHE_MS = 15_000;
+    if (this.integrationProbeCache && Date.now() - this.integrationProbeCache.at < CACHE_MS) {
+      return this.integrationProbeCache.value;
+    }
+
+    const present = async (bundleId: string): Promise<boolean> => {
+      try {
+        const { stdout } = await execFileAsync('mdfind', [`kMDItemCFBundleIdentifier == '${bundleId}'`]);
+        return stdout.trim().length > 0;
+      } catch {
+        return false;
+      }
+    };
+
+    const [hasWhatsApp, hasMusic, hasSpotify, hasWord, hasChrome] = await Promise.all([
+      present('net.whatsapp.WhatsApp'),
+      present('com.apple.Music'),
+      present('com.spotify.client'),
+      present('com.microsoft.Word'),
+      present('com.google.Chrome'),
+    ]);
+
+    const value = describeIntegrations({
+      llmConfigured: this.config.llm.provider !== 'mock' && Boolean(this.config.llm.nineRouterApiKey || this.config.llm.geminiApiKey || this.config.llm.openAiApiKey),
+      llmProvider: this.config.llm.provider,
+      hasWhatsApp,
+      hasMusic,
+      hasSpotify,
+      hasWord,
+      hasChrome,
+    });
+
+    this.integrationProbeCache = { at: Date.now(), value };
+    return value;
+  }
+
+  /**
+   * Runs a query while recording it as a task in the shared conversation.
+   * Used by both POST /query and POST /audio so voice and text share one path.
+   */
+  private async runTracked(
+    text: string,
+    requestId: string
+  ): Promise<{ result: AgentRunResult; conversationId: string; taskId: string }> {
+    if (!this.currentConversationId) {
+      const conversation = await this.conversations.create();
+      this.currentConversationId = conversation.id;
+    }
+
+    await this.conversations.appendMessage(this.currentConversationId, { role: 'user', text });
+
+    const taskId = `task_${requestId}`;
+    this.currentTaskId = taskId;
+    this.tasks.start(taskId, this.currentConversationId, text.slice(0, 60));
+
+    try {
+      const result = await this.runtime.handleTranscript(text, { requestId });
+
+      const outcome =
+        result.error === 'cancelled' ? 'cancelled' : result.completed ? 'completed' : 'failed';
+
+      // Close any step the runtime never explicitly ended (parallel tool
+      // batches emit a start without a matching end).
+      this.tasks.settleOpenSteps(taskId, outcome);
+      this.tasks.setStatus(taskId, outcome);
+
+      const stored = await this.conversations.appendMessage(this.currentConversationId, {
+        role: 'assistant',
+        text: result.text,
+        taskId,
+        error: result.error,
+      });
+
+      const conversation = await this.conversations.get(this.currentConversationId);
+      if (conversation && !conversation.taskReferences.includes(taskId)) {
+        conversation.taskReferences.push(taskId);
+      }
+
+      this.broadcast({
+        type: 'conversation_updated',
+        payload: { conversationId: this.currentConversationId, message: stored },
+        timestamp: Date.now(),
+      });
+
+      return { result, conversationId: this.currentConversationId, taskId };
+    } finally {
+      this.currentTaskId = null;
+    }
   }
 
   public listen(port: number, host: string = '127.0.0.1'): Promise<void> {

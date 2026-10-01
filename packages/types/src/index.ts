@@ -87,6 +87,96 @@ export interface ToolParametersSchema {
 }
 
 // ============================================================================
+// Conversations, Tasks & Activity
+// ============================================================================
+
+export type ConversationMessageRole = 'user' | 'assistant' | 'system';
+
+/**
+ * One high-level step the agent reports. Deliberately coarser than a tool
+ * call: the UI shows intent ("Reading package.json"), never raw payloads or
+ * model reasoning.
+ */
+export interface TaskStep {
+  id: string;
+  label: string;
+  state: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'skipped';
+  toolName?: string;
+  error?: string;
+}
+
+export interface TaskSnapshot {
+  id: string;
+  conversationId: string;
+  title: string;
+  status: TaskStatus;
+  steps: TaskStep[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ConversationMessage {
+  id: string;
+  role: ConversationMessageRole;
+  text: string;
+  createdAt: number;
+  /** Present on assistant messages that drove tools. */
+  taskId?: string;
+  error?: string;
+}
+
+export interface Conversation {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  messages: ConversationMessage[];
+  taskReferences: string[];
+}
+
+export type ActivityStatus = 'success' | 'failure' | 'cancelled' | 'simulated';
+
+export interface ActivityEntry {
+  id: string;
+  timestamp: number;
+  taskId?: string;
+  conversationId?: string;
+  label: string;
+  toolName?: string;
+  status: ActivityStatus;
+  detail?: string;
+  /**
+   * True when the execution policy simulated the action. Surfaced verbatim in
+   * the UI so a dry run is never presented as a completed action.
+   */
+  dryRun: boolean;
+}
+
+export type IntegrationStatus =
+  | 'connected'
+  | 'not_connected'
+  | 'needs_authentication'
+  | 'needs_permission'
+  | 'error';
+
+export interface IntegrationDescriptor {
+  id: string;
+  name: string;
+  category: 'messaging' | 'browser' | 'music' | 'developer' | 'system';
+  status: IntegrationStatus;
+  /** Non-sensitive human explanation of what is missing. Never a secret. */
+  detail?: string;
+}
+
+export interface AccountSession {
+  signedIn: boolean;
+  displayName?: string;
+  /** Where the token lives. The token itself is never sent to the client. */
+  storage: 'keychain' | 'none';
+  updatedAt?: number;
+}
+
+// ============================================================================
 // Side-Effect Classification & Safe Execution
 // ============================================================================
 
@@ -325,6 +415,9 @@ export type AssistantEventType =
   | 'confirmation_received'
   | 'speech_start'
   | 'speech_end'
+  | 'task_update'
+  | 'activity'
+  | 'conversation_updated'
   | 'error';
 
 export interface AssistantEvent<T = unknown> {
@@ -361,7 +454,38 @@ export interface TaskAction {
   parameters: Record<string, unknown>;
 }
 
-export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
+/**
+ * Authoritative task lifecycle, shared by the notch and the desktop app.
+ *
+ * `pending`/`in_progress` are retained from the original computer-use model so
+ * existing consumers keep working; they are treated as equivalents of
+ * `queued`/`executing`.
+ */
+export type TaskStatus =
+  | 'queued'
+  | 'planning'
+  | 'executing'
+  | 'waiting'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'requires_foreground'
+  | 'pending'
+  | 'in_progress';
+
+/** States in which a task can still make progress. */
+export const ACTIVE_TASK_STATUSES: TaskStatus[] = [
+  'queued',
+  'planning',
+  'executing',
+  'waiting',
+  'requires_foreground',
+  'pending',
+  'in_progress',
+];
+
+/** States a task can never leave on its own. */
+export const TERMINAL_TASK_STATUSES: TaskStatus[] = ['completed', 'failed', 'cancelled'];
 
 export interface TaskContext {
   taskId: string;

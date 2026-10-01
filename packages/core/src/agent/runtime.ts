@@ -310,6 +310,7 @@ export class AgentRuntime {
         this.emitEvent('tool_start', {
           toolName: routeResult.toolCalls[0].name,
           parameters: routeResult.toolCalls[0].parameters,
+          callId: routeResult.toolCalls[0].id,
           fastRoute: true,
         });
 
@@ -318,8 +319,30 @@ export class AgentRuntime {
 
         // Parallel execution for independent actions (Section 12)
         if (routeResult.isParallel && routeResult.toolCalls.length > 1) {
+          // Announce every call up front, then reconcile each result as it
+          // lands. Without this, concurrent tool runs are invisible to the
+          // task panel and the activity log.
+          for (const tc of routeResult.toolCalls) {
+            this.emitEvent('tool_start', { toolName: tc.name, parameters: tc.parameters, callId: tc.id });
+          }
+
           const results = await Promise.all(
-            routeResult.toolCalls.map((tc) => this.toolExecutor.execute(tc.name, tc.parameters, tc.id))
+            routeResult.toolCalls.map(async (tc) => {
+              const toolStart = Date.now();
+              const executed = await this.toolExecutor.execute(tc.name, tc.parameters, tc.id);
+              this.logger.info('Tool execution completed (fast-route, parallel)', {
+                requestId, tool: tc.name, result: executed.result.success ? 'success' : 'failure',
+                durationMs: Date.now() - toolStart,
+              });
+              this.emitEvent('tool_end', {
+                toolName: tc.name,
+                success: executed.result.success,
+                data: executed.result.data,
+                error: executed.result.error,
+                callId: tc.id,
+              });
+              return executed;
+            })
           );
           executedCalls.push(...results);
         } else {
@@ -327,13 +350,13 @@ export class AgentRuntime {
           for (const tc of routeResult.toolCalls) {
             if (abortController.signal.aborted) break;
             const toolStart = Date.now();
-            this.emitEvent('tool_start', { toolName: tc.name, parameters: tc.parameters });
+            this.emitEvent('tool_start', { toolName: tc.name, parameters: tc.parameters, callId: tc.id });
             const executed = await this.toolExecutor.execute(tc.name, tc.parameters, tc.id);
             const toolDur = Date.now() - toolStart;
             this.logger.info('Tool execution completed (fast-route)', {
               requestId, tool: tc.name, result: executed.result.success ? 'success' : 'failure', durationMs: toolDur,
             });
-            this.emitEvent('tool_end', { toolName: tc.name, success: executed.result.success, data: executed.result.data });
+            this.emitEvent('tool_end', { toolName: tc.name, success: executed.result.success, data: executed.result.data, callId: tc.id });
             executedCalls.push(executed);
           }
         }
@@ -633,7 +656,7 @@ export class AgentRuntime {
               console.log(JSON.stringify(tc.parameters, null, 2));
             }
 
-            this.emitEvent('tool_start', { toolName: tc.name, parameters: tc.parameters });
+            this.emitEvent('tool_start', { toolName: tc.name, parameters: tc.parameters, callId: tc.id });
             const executed = await this.toolExecutor.execute(tc.name, tc.parameters, tc.id);
             const toolDurationMs = Date.now() - toolStartTime;
 
@@ -659,6 +682,7 @@ export class AgentRuntime {
               success: executed.result.success,
               data: executed.result.data,
               error: executed.result.error,
+              callId: tc.id,
             });
 
             // Append sanitized tool observation to conversation history
