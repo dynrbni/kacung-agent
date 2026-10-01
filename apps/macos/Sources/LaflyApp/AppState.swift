@@ -45,6 +45,10 @@ public final class AppState: ObservableObject {
     private var autoDismissWorkItem: DispatchWorkItem?
     private var hideWorkItem: DispatchWorkItem?
 
+    /// Pending transition from "hotkey pressed" to "actually push-to-talking".
+    /// Cancelled on release so a tap never opens the microphone.
+    private var hotkeyArmWorkItem: DispatchWorkItem?
+
     private init() {
         checkPermissions()
         updateNotchMetrics()
@@ -205,8 +209,8 @@ public final class AppState: ObservableObject {
     }
 
     private func setupHotkey() {
-        hotkey.onHotkeyTriggered = { [weak self] in
-            self?.handleHotkeyWake()
+        hotkey.onHotkeyPressed = { [weak self] in
+            self?.handleHotkeyPress()
         }
         hotkey.onHotkeyReleased = { [weak self] duration in
             self?.handleHotkeyRelease(duration: duration)
@@ -214,46 +218,89 @@ public final class AppState: ObservableObject {
         hotkey.registerHotkey()
     }
 
+    // MARK: - Push to talk
+
+    /**
+     * How long Control + Option must stay down before the mic opens. Long enough
+     * to discard an accidental brush against the keys, short enough that a
+     * deliberate press feels immediate.
+     */
+    public static let pushToTalkThreshold: TimeInterval = 0.2
+
+    /**
+     * Control + Option was pressed. This only *arms* push-to-talk: nothing is
+     * shown and the microphone stays closed until the key is actually held.
+     */
+    public func handleHotkeyPress() {
+        hotkeyArmWorkItem?.cancel()
+
+        let item = DispatchWorkItem { [weak self] in
+            self?.beginPushToTalk()
+        }
+        hotkeyArmWorkItem = item
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + Self.pushToTalkThreshold,
+            execute: item
+        )
+    }
+
+    /// The key was genuinely held, so now the notch opens and the mic starts.
+    private func beginPushToTalk() {
+        hotkeyArmWorkItem?.cancel()
+        hotkeyArmWorkItem = nil
+        autoDismissWorkItem?.cancel()
+
+        // Holding always starts a fresh capture, even if a previous result is
+        // still on screen.
+        showOverlay()
+        startListening()
+    }
+
+    /// Hands-free listening, for anyone who would rather not hold the hotkey.
+    /// Submission is handled by the VAD trailing-silence detector.
+    public func startHandsFreeListening() {
+        hotkeyArmWorkItem?.cancel()
+        hotkeyArmWorkItem = nil
+        showOverlay()
+        startListening()
+    }
+
     public func handleHotkeyRelease(duration: TimeInterval) {
-        // Quick tap (< 0.45s) means user pressed Control+Option to summon hands-free listening.
-        // Keep listening until user finishes speaking and VAD silence detector triggers.
-        if duration < 0.45 {
+        hotkeyArmWorkItem?.cancel()
+        hotkeyArmWorkItem = nil
+
+        // A tap is not a command. It must never leave the notch on screen or
+        // leave the microphone open.
+        if duration < Self.pushToTalkThreshold {
+            if state == .listening || isVisibleOnScreen {
+                print("[AppState] Control + Option tapped for \(String(format: "%.2f", duration))s — ignoring")
+                cancelPushToTalk()
+            }
             return
         }
 
-        // Long press (>= 0.45s) is Push-to-Talk mode.
-        if state == .listening {
-            let hasText = !speechRecognizer.liveTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            if speechRecognizer.hasSpoken && hasText {
-                print("[AppState] Push-to-talk released with spoken speech (\(speechRecognizer.liveTranscript)). Submitting query...")
-                stopListening()
-            } else {
-                print("[AppState] Push-to-talk released without speech. Discarding prompt and hiding notch.")
-                speechRecognizer.cancelListening()
-                state = .idle
-                liveTranscript = ""
-                inputText = ""
-                hideOverlay()
-            }
+        guard state == .listening else { return }
+
+        let transcript = speechRecognizer.liveTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        if speechRecognizer.hasSpoken && !transcript.isEmpty {
+            print("[AppState] Push-to-talk released with speech (\(transcript)). Submitting query...")
+            // stopListening() finalises the transcript, which submits it.
+            stopListening()
+        } else {
+            print("[AppState] Push-to-talk released without speech. Discarding prompt and hiding notch.")
+            cancelPushToTalk()
         }
     }
 
-    public func handleHotkeyWake() {
-        autoDismissWorkItem?.cancel()
-        if isVisibleOnScreen {
-            // Dismiss immediately if user taps hotkey while active
-            if state == .listening {
-                speechRecognizer.cancelListening()
-                state = .idle
-                liveTranscript = ""
-                inputText = ""
-            }
-            hideOverlay()
-        } else {
-            // Summon from notch and listen immediately
-            showOverlay()
-            startListening()
-        }
+    /// Tears down a capture without submitting anything.
+    private func cancelPushToTalk() {
+        speechRecognizer.cancelListening()
+        state = .idle
+        liveTranscript = ""
+        inputText = ""
+        errorMessage = nil
+        pendingConfirmation = nil
+        hideOverlay()
     }
 
     public func startListening() {

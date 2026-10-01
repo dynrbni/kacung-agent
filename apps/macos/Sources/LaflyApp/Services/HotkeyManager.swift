@@ -6,7 +6,13 @@ public final class HotkeyManager {
 
     private var globalMonitor: Any?
     private var localMonitor: Any?
-    public var onHotkeyTriggered: (() -> Void)?
+
+    /// Fired the moment Control + Option becomes active. The app treats this as
+    /// "armed", not as "start recording" — push-to-talk must not react to a
+    /// stray tap.
+    public var onHotkeyPressed: (() -> Void)?
+
+    /// Fired when either modifier is released, with how long the pair was held.
     public var onHotkeyReleased: ((TimeInterval) -> Void)?
 
     private var isControlOptionActive = false
@@ -62,7 +68,7 @@ public final class HotkeyManager {
                 if !isControlOptionActive {
                     isControlOptionActive = true
                     pressStartTime = Date().timeIntervalSince1970
-                    triggerDebounced()
+                    notifyPressed()
                     return true
                 }
             } else {
@@ -81,7 +87,7 @@ public final class HotkeyManager {
         // Case 2: Key down with Control + Option (e.g. Space with Control+Option)
         if event.type == .keyDown && isControl && isOption && !hasOtherModifiers {
             if event.keyCode == 49 { // Space
-                triggerDebounced()
+                notifyPressed()
                 return true
             }
         }
@@ -89,13 +95,13 @@ public final class HotkeyManager {
         return false
     }
 
-    private func triggerDebounced() {
+    private func notifyPressed() {
         let now = Date().timeIntervalSince1970
         guard now - lastTriggerTime > 0.35 else { return }
         lastTriggerTime = now
         DispatchQueue.main.async { [weak self] in
-            print("[HotkeyManager] Control + Option triggered!")
-            self?.onHotkeyTriggered?()
+            print("[HotkeyManager] Control + Option pressed")
+            self?.onHotkeyPressed?()
         }
     }
 }

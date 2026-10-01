@@ -44,16 +44,22 @@ public struct MenuBarView: View {
                 }
             }
             .buttonStyle(.plain)
+            .help("Show or hide the notch without using the microphone")
 
             Button(action: {
-                appState.startListening()
+                appState.startHandsFreeListening()
             }) {
                 HStack {
                     Image(systemName: "mic.fill")
                     Text("Activate Voice (Woi Lafly)")
+                    Spacer()
+                    Text("hold ⌃⌥")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(.secondary)
                 }
             }
             .buttonStyle(.plain)
+            .help("Hold Control + Option to talk and release to submit, or use this button for hands-free listening.")
 
             Button(action: {
                 appState.resetConversation()

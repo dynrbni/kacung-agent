@@ -280,8 +280,8 @@ struct ChatView: View {
                     }
 
                 Button {
-                    // Same hotkey path as the notch; no second voice system.
-                    AppState.shared.handleHotkeyWake()
+                    // Same push-to-talk path as the hotkey; no second voice system.
+                    AppState.shared.handleHotkeyPress()
                 } label: {
                     Image(systemName: store.agentState == .listening ? "waveform" : "mic")
                         .font(.system(size: LaflyTheme.Size.body))
