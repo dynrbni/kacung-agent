@@ -13,11 +13,12 @@ struct TaskCard: View {
             HStack(alignment: .firstTextBaseline, spacing: LoflyTheme.Space.s) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(task.title)
-                        .font(LoflyTheme.title(LoflyTheme.Size.sectionTitle))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(LoflyTheme.primaryText)
                         .lineLimit(2)
                     Text(LoflyDate.relative(milliseconds: task.updatedAt))
-                        .font(LoflyTheme.caption(LoflyTheme.Size.caption))
-                        .foregroundStyle(.secondary)
+                        .font(LoflyTheme.caption(11))
+                        .foregroundStyle(LoflyTheme.tertiaryText)
                 }
                 Spacer(minLength: LoflyTheme.Space.s)
                 LoflyStatusPill(
@@ -37,17 +38,17 @@ struct TaskCard: View {
                     ForEach(task.steps) { step in
                         HStack(spacing: LoflyTheme.Space.s) {
                             Image(systemName: LoflyTheme.symbol(for: step))
-                                .font(.system(size: LoflyTheme.Size.callout))
+                                .font(.system(size: 12))
                                 .foregroundStyle(LoflyTheme.color(for: step))
                                 .frame(width: 14)
                             Text(step.label)
-                                .font(LoflyTheme.body(LoflyTheme.Size.callout))
-                                .foregroundStyle(step.state == .skipped ? .secondary : .primary)
+                                .font(LoflyTheme.body(13))
+                                .foregroundStyle(step.state == .skipped ? LoflyTheme.secondaryText : LoflyTheme.primaryText)
                             Spacer()
                             if let error = step.error, !error.isEmpty {
                                 Text(error)
-                                    .font(LoflyTheme.caption(LoflyTheme.Size.caption))
-                                    .foregroundStyle(.red)
+                                    .font(LoflyTheme.caption(11))
+                                    .foregroundStyle(Color.red)
                                     .lineLimit(1)
                             }
                         }
@@ -62,7 +63,7 @@ struct TaskCard: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: LoflyTheme.Radius.large, style: .continuous)
-                .stroke(LoflyTheme.separator, lineWidth: 0.5)
+                .stroke(LoflyTheme.borderSubtle, lineWidth: 0.5)
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Task: \(task.title). Status: \(task.status.title). \(task.steps.count) steps.")

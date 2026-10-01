@@ -10,16 +10,17 @@ func screenHeader(
     HStack(alignment: .firstTextBaseline, spacing: LoflyTheme.Space.s) {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(LoflyTheme.display(LoflyTheme.Size.windowTitle))
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(LoflyTheme.primaryText)
             Text(subtitle)
-                .font(LoflyTheme.body(LoflyTheme.Size.callout))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(LoflyTheme.secondaryText)
         }
         Spacer()
         trailing()
     }
-    .padding(.horizontal, LoflyTheme.Space.l)
-    .padding(.vertical, LoflyTheme.Space.m)
+    .padding(.horizontal, 16)
+    .padding(.vertical, 12)
 }
 
 /// Empty state. It names the cause and, when there is one, the single action
@@ -30,20 +31,21 @@ func emptyState(
     actionTitle: String? = nil,
     action: (() -> Void)? = nil
 ) -> some View {
-    VStack(spacing: LoflyTheme.Space.s) {
+    VStack(spacing: 8) {
         Spacer()
         Text(title)
-            .font(LoflyTheme.title(LoflyTheme.Size.sectionTitle))
+            .font(.system(size: 14.5, weight: .semibold))
+            .foregroundStyle(LoflyTheme.primaryText)
         Text(message)
-            .font(LoflyTheme.body(LoflyTheme.Size.callout))
-            .foregroundStyle(.secondary)
+            .font(.system(size: 13, weight: .regular))
+            .foregroundStyle(LoflyTheme.secondaryText)
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: 380)
         if let actionTitle, let action {
             Button(actionTitle, action: action)
                 .controlSize(.small)
-                .padding(.top, LoflyTheme.Space.xs)
+                .padding(.top, 4)
         }
         Spacer()
     }
@@ -53,13 +55,13 @@ func emptyState(
 /// Loading state. Says what is being loaded rather than showing a bare
 /// spinner, so the wait has a subject.
 func loadingState(_ message: String) -> some View {
-    VStack(spacing: LoflyTheme.Space.s) {
+    VStack(spacing: 8) {
         Spacer()
         ProgressView()
             .controlSize(.small)
         Text(message)
-            .font(LoflyTheme.body(LoflyTheme.Size.callout))
-            .foregroundStyle(.secondary)
+            .font(.system(size: 13, weight: .regular))
+            .foregroundStyle(LoflyTheme.secondaryText)
         Spacer()
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)

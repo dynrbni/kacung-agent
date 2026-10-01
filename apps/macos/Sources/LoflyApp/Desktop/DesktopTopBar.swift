@@ -1,13 +1,11 @@
 import SwiftUI
 import AppKit
 
-/// Unified top bar matching ChatGPT macOS / Lofly companion:
-/// - Leading traffic lights clearance (~78pt)
-/// - Navigation controls (Back ← and Forward →)
-/// - Sidebar toggle button ([|]) to collapse / expand the sidebar
-/// - Thread tabs allowing rapid switching between recent conversations
-/// - Animated titles when AI generates or updates conversation titles
-/// - "+" / "New thread" button to start a fresh draft
+/// Restrained native macOS toolbar:
+/// - Compact height (42pt) that visually blends into the window
+/// - Traffic lights clearance and navigation controls
+/// - Thread tabs allowing rapid switching between conversations
+/// - Seamless graphite styling with subtle borders and states
 public struct DesktopTopBar: View {
     @EnvironmentObject private var store: DesktopStore
 
@@ -20,35 +18,34 @@ public struct DesktopTopBar: View {
                 Spacer()
                     .frame(width: 76)
 
-                navButtons
-
                 Button(action: { store.toggleSidebar() }) {
                     Image(systemName: "sidebar.leading")
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(Color.secondary)
-                        .frame(width: 28, height: 28)
+                        .font(.system(size: 12))
+                        .foregroundStyle(LoflyTheme.secondaryText)
+                        .frame(width: 26, height: 26)
                         .background(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            RoundedRectangle(cornerRadius: LoflyTheme.Radius.small, style: .continuous)
                                 .fill(Color.clear)
                         )
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("Buka sidebar")
+                .help("Open sidebar")
                 .accessibilityLabel("Open sidebar")
 
-                Rectangle()
-                    .fill(LoflyTheme.separator.opacity(0.6))
-                    .frame(width: 1, height: 16)
-                    .padding(.horizontal, 2)
-            } else {
-                // When sidebar is visible, traffic lights sit in the sidebar header
                 navButtons
-                    .padding(.leading, 12)
 
                 Rectangle()
-                    .fill(LoflyTheme.separator.opacity(0.6))
-                    .frame(width: 1, height: 16)
+                    .fill(LoflyTheme.separator)
+                    .frame(width: 1, height: 14)
+                    .padding(.horizontal, 2)
+            } else {
+                navButtons
+                    .padding(.leading, 10)
+
+                Rectangle()
+                    .fill(LoflyTheme.separator)
+                    .frame(width: 1, height: 14)
                     .padding(.horizontal, 2)
             }
 
@@ -57,18 +54,18 @@ public struct DesktopTopBar: View {
 
             Spacer(minLength: 8)
         }
-        .frame(height: 48)
+        .frame(height: 42)
         .padding(.horizontal, 8)
-        .background(LoflyTheme.surface)
+        .background(LoflyTheme.contentBackground)
     }
 
     private var navButtons: some View {
         HStack(spacing: 2) {
             Button(action: { store.goBack() }) {
                 Image(systemName: "chevron.backward")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(store.canGoBack ? Color.primary : Color.secondary.opacity(0.4))
-                    .frame(width: 26, height: 26)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(store.canGoBack ? LoflyTheme.primaryText : LoflyTheme.secondaryText.opacity(0.35))
+                    .frame(width: 24, height: 24)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -77,9 +74,9 @@ public struct DesktopTopBar: View {
 
             Button(action: { store.goForward() }) {
                 Image(systemName: "chevron.forward")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(store.canGoForward ? Color.primary : Color.secondary.opacity(0.4))
-                    .frame(width: 26, height: 26)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(store.canGoForward ? LoflyTheme.primaryText : LoflyTheme.secondaryText.opacity(0.35))
+                    .frame(width: 24, height: 24)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -93,9 +90,8 @@ public struct DesktopTopBar: View {
     @ViewBuilder
     private var threadTabsBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
+            HStack(spacing: 5) {
                 if store.openThreadIds.isEmpty && store.selectedConversationId == nil {
-                    // Draft / New chat tab
                     activeDraftTab
                 } else {
                     ForEach(store.openThreadIds, id: \.self) { threadId in
@@ -110,40 +106,40 @@ public struct DesktopTopBar: View {
                 // Plus / New thread button
                 Button(action: { store.newConversation() }) {
                     Image(systemName: "plus")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 26, height: 26)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(LoflyTheme.secondaryText)
+                        .frame(width: 24, height: 24)
                         .background(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(Color.primary.opacity(0.04))
+                            RoundedRectangle(cornerRadius: LoflyTheme.Radius.small, style: .continuous)
+                                .fill(LoflyTheme.subtleFill)
                         )
                 }
                 .buttonStyle(.plain)
                 .help("New thread")
                 .accessibilityLabel("New thread")
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, 3)
         }
     }
 
     private var activeDraftTab: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 5) {
             Image(systemName: "sparkle")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 9.5, weight: .semibold))
                 .foregroundStyle(LoflyTheme.accent)
             Text("New thread")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.primary)
+                .foregroundStyle(LoflyTheme.primaryText)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
         .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(Color.primary.opacity(0.1))
+            RoundedRectangle(cornerRadius: LoflyTheme.Radius.small, style: .continuous)
+                .fill(LoflyTheme.selectedFill)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: LoflyTheme.Radius.small, style: .continuous)
+                .stroke(LoflyTheme.borderSubtle, lineWidth: 0.5)
         )
     }
 
@@ -152,20 +148,16 @@ public struct DesktopTopBar: View {
         let conv = store.conversations.first(where: { $0.id == threadId })
         let title = conv?.title ?? "Chat"
 
-        return HStack(spacing: 6) {
+        return HStack(spacing: 5) {
             Button {
                 store.selectConversation(threadId)
             } label: {
                 Text(title)
                     .font(.system(size: 12, weight: isSelected ? .medium : .regular))
-                    .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                    .foregroundStyle(isSelected ? LoflyTheme.primaryText : LoflyTheme.secondaryText)
                     .lineLimit(1)
                     .frame(maxWidth: 160)
                     .id("title-\(threadId)-\(title)")
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .scale(scale: 0.94)).combined(with: .offset(y: 1)),
-                        removal: .opacity
-                    ))
                     .animation(.spring(response: 0.35, dampingFraction: 0.78), value: title)
             }
             .buttonStyle(.plain)
@@ -174,22 +166,22 @@ public struct DesktopTopBar: View {
                 store.closeThread(threadId)
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(isSelected ? Color.secondary : Color.secondary.opacity(0.6))
+                    .font(.system(size: 8.5, weight: .semibold))
+                    .foregroundStyle(isSelected ? LoflyTheme.secondaryText : LoflyTheme.tertiaryText)
                     .frame(width: 14, height: 14)
             }
             .buttonStyle(.plain)
             .help("Close thread")
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 4)
         .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(isSelected ? Color.primary.opacity(0.1) : Color.clear)
+            RoundedRectangle(cornerRadius: LoflyTheme.Radius.small, style: .continuous)
+                .fill(isSelected ? LoflyTheme.selectedFill : Color.clear)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .stroke(isSelected ? Color.primary.opacity(0.12) : Color.clear, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: LoflyTheme.Radius.small, style: .continuous)
+                .stroke(isSelected ? LoflyTheme.borderSubtle : Color.clear, lineWidth: 0.5)
         )
         .contentShape(Rectangle())
     }

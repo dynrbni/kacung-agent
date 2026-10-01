@@ -72,13 +72,17 @@ struct SettingsView: View {
                         Text(item.title)
                             .font(LoflyTheme.label(LoflyTheme.Size.callout))
                     }
-                    .padding(.horizontal, LoflyTheme.Space.m)
-                    .padding(.vertical, 6)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
                     .background(
-                        RoundedRectangle(cornerRadius: LoflyTheme.Radius.medium, style: .continuous)
-                            .fill(tab == item ? LoflyTheme.accent.opacity(0.16) : .clear)
+                        RoundedRectangle(cornerRadius: LoflyTheme.Radius.small, style: .continuous)
+                            .fill(tab == item ? LoflyTheme.selectedFill : Color.clear)
                     )
-                    .foregroundStyle(tab == item ? LoflyTheme.accent : Color.secondary)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: LoflyTheme.Radius.small, style: .continuous)
+                            .stroke(tab == item ? LoflyTheme.borderSubtle : Color.clear, lineWidth: 0.5)
+                    )
+                    .foregroundStyle(tab == item ? LoflyTheme.primaryText : LoflyTheme.secondaryText)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -293,11 +297,12 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: LoflyTheme.Space.m) {
             HStack(spacing: LoflyTheme.Space.s) {
                 Image(systemName: symbol)
-                    .font(.system(size: LoflyTheme.Size.callout))
+                    .font(.system(size: 13))
                     .foregroundStyle(LoflyTheme.accent)
                     .frame(width: 18)
                 Text(title)
-                    .font(LoflyTheme.label(LoflyTheme.Size.sectionTitle))
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .foregroundStyle(LoflyTheme.primaryText)
             }
 
             VStack(alignment: .leading, spacing: LoflyTheme.Space.s) {
@@ -312,7 +317,7 @@ struct SettingsView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: LoflyTheme.Radius.large, style: .continuous)
-                .stroke(LoflyTheme.separator, lineWidth: 0.5)
+                .stroke(LoflyTheme.borderSubtle, lineWidth: 0.5)
         )
     }
 }

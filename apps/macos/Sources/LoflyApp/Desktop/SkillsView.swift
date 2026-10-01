@@ -108,17 +108,15 @@ private struct SkillRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: LoflyTheme.Space.s) {
                     Text(skill.name)
-                        .font(LoflyTheme.body(LoflyTheme.Size.body))
+                        .font(.system(size: 13.5, weight: .medium))
+                        .foregroundStyle(LoflyTheme.primaryText)
                     Text(skill.sideEffectTitle)
-                        .font(LoflyTheme.caption(LoflyTheme.Size.caption))
-                        .foregroundStyle(.tertiary)
+                        .font(LoflyTheme.caption(11))
+                        .foregroundStyle(LoflyTheme.tertiaryText)
                 }
-                // A whole sentence, never truncated: a row that stops
-                // mid-sentence reads as a rendering bug. Anything the first
-                // sentence leaves out stays available in the tooltip.
                 Text(skill.summary ?? skill.description)
-                    .font(LoflyTheme.caption(LoflyTheme.Size.caption))
-                    .foregroundStyle(.secondary)
+                    .font(LoflyTheme.caption(11.5))
+                    .foregroundStyle(LoflyTheme.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
 

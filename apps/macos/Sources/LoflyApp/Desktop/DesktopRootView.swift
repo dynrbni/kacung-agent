@@ -50,6 +50,8 @@ public final class DesktopWindowController {
         window.titlebarSeparatorStyle = .none
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
+        window.backgroundColor = NSColor(red: 0.094, green: 0.094, blue: 0.094, alpha: 1.0)
+        window.appearance = NSAppearance(named: .darkAqua)
         window.center()
         window.setFrameAutosaveName("LoflyDesktopWindow")
         let hostingController = NSHostingController(rootView: contentView)
@@ -88,7 +90,7 @@ public struct DesktopRootView: View {
         HStack(spacing: 0) {
             if store.isSidebarVisible {
                 DesktopSidebar()
-                    .frame(width: 260)
+                    .frame(width: LoflyTheme.sidebarWidth)
                     .transition(.move(edge: .leading).combined(with: .opacity))
 
                 LoflySeparator(.vertical)
@@ -103,7 +105,7 @@ public struct DesktopRootView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .background(LoflyTheme.surface)
+        .background(LoflyTheme.contentBackground)
         .ignoresSafeArea(.all, edges: .top)
         // Closing the window must not tear down the agent: the app is a
         // background accessory, so the desktop surface is purely additive.

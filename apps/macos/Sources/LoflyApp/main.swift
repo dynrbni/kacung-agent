@@ -89,6 +89,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
+    @objc func newChatAction() {
+        DesktopStore.shared.activeSurface = .chat
+        DesktopStore.shared.newConversation()
+        DesktopWindowController.shared.show()
+    }
+
     private func setupMainMenu() {
         let mainMenu = NSMenu()
 
@@ -106,6 +112,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(withTitle: "Quit Lofly", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appMenuItem.submenu = appMenu
         mainMenu.addItem(appMenuItem)
+
+        // File Menu (Native Cmd+N for New Chat)
+        let fileMenuItem = NSMenuItem()
+        let fileMenu = NSMenu(title: "File")
+        fileMenu.addItem(withTitle: "New Chat", action: #selector(AppDelegate.newChatAction), keyEquivalent: "n")
+        fileMenuItem.submenu = fileMenu
+        mainMenu.addItem(fileMenuItem)
 
         // Edit Menu (crucial for Cmd+C, Cmd+V, Cmd+X, Cmd+A in TextField)
         let editMenuItem = NSMenuItem()

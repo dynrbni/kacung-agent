@@ -229,15 +229,15 @@ public struct RichMarkdownView: View {
             (Text(MarkdownParser.inlineAttributedString(content)) + caretText(isLast: isLast))
                 .font(.system(size: 20, weight: .bold))
                 .lineSpacing(5)
-                .foregroundStyle(.primary)
-                .padding(.top, 12)
+                .foregroundStyle(LoflyTheme.primaryText)
+                .padding(.top, 14)
                 .padding(.bottom, 2)
 
         case .heading2(let content):
             (Text(MarkdownParser.inlineAttributedString(content)) + caretText(isLast: isLast))
                 .font(.system(size: 17.5, weight: .bold))
                 .lineSpacing(4.5)
-                .foregroundStyle(.primary)
+                .foregroundStyle(LoflyTheme.primaryText)
                 .padding(.top, 10)
                 .padding(.bottom, 2)
 
@@ -245,7 +245,7 @@ public struct RichMarkdownView: View {
             (Text(MarkdownParser.inlineAttributedString(content)) + caretText(isLast: isLast))
                 .font(.system(size: 15.5, weight: .semibold))
                 .lineSpacing(4)
-                .foregroundStyle(.primary)
+                .foregroundStyle(LoflyTheme.primaryText)
                 .padding(.top, 8)
                 .padding(.bottom, 1)
 
@@ -253,7 +253,7 @@ public struct RichMarkdownView: View {
             (Text(MarkdownParser.inlineAttributedString(content)) + caretText(isLast: isLast))
                 .font(.system(size: 14.5, weight: .semibold))
                 .lineSpacing(4)
-                .foregroundStyle(.primary)
+                .foregroundStyle(LoflyTheme.primaryText)
                 .padding(.top, 6)
                 .padding(.bottom, 1)
 
@@ -261,12 +261,12 @@ public struct RichMarkdownView: View {
             HStack(alignment: .firstTextBaseline, spacing: 9) {
                 Text("•")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(Color.secondary.opacity(0.8))
+                    .foregroundStyle(LoflyTheme.tertiaryText)
                     .frame(width: 8, alignment: .center)
                 (Text(MarkdownParser.inlineAttributedString(content)) + caretText(isLast: isLast))
                     .font(.system(size: 14.5, weight: .regular))
                     .lineSpacing(5.5)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(LoflyTheme.primaryText)
             }
             .padding(.leading, CGFloat(indent * 18))
             .padding(.vertical, 3)
@@ -274,13 +274,13 @@ public struct RichMarkdownView: View {
         case .numbered(let content, let num, let indent):
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("\(num).")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.primary)
+                    .font(.system(size: 14.5, weight: .semibold))
+                    .foregroundStyle(LoflyTheme.primaryText)
                     .frame(minWidth: 20, alignment: .leading)
                 (Text(MarkdownParser.inlineAttributedString(content)) + caretText(isLast: isLast))
                     .font(.system(size: 14.5, weight: .regular))
                     .lineSpacing(5.5)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(LoflyTheme.primaryText)
             }
             .padding(.leading, CGFloat(indent * 18))
             .padding(.top, indent == 0 ? 6 : 2)
@@ -290,7 +290,7 @@ public struct RichMarkdownView: View {
             (Text(MarkdownParser.inlineAttributedString(content)) + caretText(isLast: isLast))
                 .font(.system(size: 14.5, weight: .regular))
                 .lineSpacing(5.5)
-                .foregroundStyle(.primary)
+                .foregroundStyle(LoflyTheme.primaryText)
                 .padding(.bottom, 2)
 
         case .codeBlock(let code, let lang):
@@ -301,18 +301,20 @@ public struct RichMarkdownView: View {
                 ForEach(Array(cells.enumerated()), id: \.offset) { cellIndex, cell in
                     let isLastCell = cellIndex == cells.count - 1
                     (Text(MarkdownParser.inlineAttributedString(cell)) + (isLast && isLastCell ? caretText(isLast: true) : Text("")))
-                        .font(isHeader ? .system(size: 13.5, weight: .bold) : .system(size: 13.5, weight: .regular))
-                        .foregroundStyle(isHeader ? .primary : .secondary)
+                        .font(isHeader ? .system(size: 13, weight: .semibold) : .system(size: 13, weight: .regular))
+                        .foregroundStyle(isHeader ? LoflyTheme.primaryText : LoflyTheme.secondaryText)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .padding(.vertical, 4)
             .padding(.horizontal, 8)
-            .background(isHeader ? Color.primary.opacity(0.05) : Color.clear)
+            .background(isHeader ? LoflyTheme.subtleFill : Color.clear)
             .cornerRadius(4)
 
         case .divider:
-            Divider()
+            Rectangle()
+                .fill(LoflyTheme.separator)
+                .frame(height: 1)
                 .padding(.vertical, 6)
         }
     }
@@ -339,12 +341,12 @@ private struct CodeBlockView: View {
             HStack {
                 if let lang = lang, !lang.isEmpty {
                     Text(lang.uppercased())
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(LoflyTheme.tertiaryText)
                 } else {
                     Text("CODE")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(LoflyTheme.tertiaryText)
                 }
 
                 Spacer()
@@ -361,20 +363,21 @@ private struct CodeBlockView: View {
                         Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
                             .font(.system(size: 10))
                         Text(didCopy ? "Copied" : "Copy")
-                            .font(.system(size: 10))
+                            .font(.system(size: 10, weight: .medium))
                     }
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(didCopy ? LoflyTheme.accent : LoflyTheme.secondaryText)
                 }
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(Color.primary.opacity(0.04))
+            .background(Color.white.opacity(0.025))
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .firstTextBaseline, spacing: 0) {
                     Text(code)
                         .font(.system(size: 12.5, design: .monospaced))
+                        .foregroundStyle(LoflyTheme.primaryText)
                     if isStreaming {
                         Text(" ▋")
                             .font(.system(size: 12.5, weight: .bold, design: .monospaced))
@@ -386,12 +389,12 @@ private struct CodeBlockView: View {
             }
         }
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
+            RoundedRectangle(cornerRadius: LoflyTheme.Radius.medium, style: .continuous)
+                .fill(Color(red: 0.106, green: 0.106, blue: 0.106))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(LoflyTheme.separator.opacity(0.6), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: LoflyTheme.Radius.medium, style: .continuous)
+                .stroke(LoflyTheme.borderSubtle, lineWidth: 0.5)
         )
         .padding(.vertical, 4)
     }

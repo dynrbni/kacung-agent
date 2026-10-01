@@ -15,103 +15,101 @@ public enum LoflyTheme {
 
     public static func display(_ size: CGFloat) -> Font { .system(size: size, weight: .semibold) }
     public static func title(_ size: CGFloat) -> Font { .system(size: size, weight: .semibold) }
-    public static func body(_ size: CGFloat) -> Font { .system(size: size) }
-    public static func callout(_ size: CGFloat) -> Font { .system(size: size) }
+    public static func body(_ size: CGFloat) -> Font { .system(size: size, weight: .regular) }
+    public static func callout(_ size: CGFloat) -> Font { .system(size: size, weight: .regular) }
     public static func label(_ size: CGFloat) -> Font { .system(size: size, weight: .medium) }
-    public static func caption(_ size: CGFloat) -> Font { .system(size: size) }
+    public static func caption(_ size: CGFloat) -> Font { .system(size: size, weight: .regular) }
     public static func mono(_ size: CGFloat) -> Font { .system(size: size, design: .monospaced) }
 
-    /// Sizes used across the app, so screens agree with each other.
+    /// Standard sizes across Lofly
     public enum Size {
-        public static let windowTitle: CGFloat = 15
-        public static let sectionTitle: CGFloat = 13
-        public static let body: CGFloat = 13
-        public static let callout: CGFloat = 12
-        public static let caption: CGFloat = 11
+        public static let pageGreeting: CGFloat = 34
+        public static let windowTitle: CGFloat = 14.5
+        public static let sectionTitle: CGFloat = 13.5
+        public static let body: CGFloat = 14.5
+        public static let callout: CGFloat = 13
+        public static let caption: CGFloat = 11.5
+        public static let metadata: CGFloat = 11
         public static let metric: CGFloat = 22
     }
 
-    // MARK: - Spacing
+    // MARK: - Spacing System (Multiples of 4/8)
 
     public enum Space {
+        public static let xxs: CGFloat = 2
         public static let xs: CGFloat = 4
         public static let s: CGFloat = 8
         public static let m: CGFloat = 12
         public static let l: CGFloat = 16
         public static let xl: CGFloat = 24
         public static let xxl: CGFloat = 32
+        public static let xxxl: CGFloat = 48
     }
+
+    // MARK: - Radius System
 
     public enum Radius {
         public static let small: CGFloat = 6
         public static let medium: CGFloat = 8
         public static let large: CGFloat = 12
-        public static let xl: CGFloat = 22
+        public static let container: CGFloat = 18
+        public static let composer: CGFloat = 18
         public static let pill: CGFloat = 999
     }
 
     public static let sidebarWidth: CGFloat = 240
     public static let taskPanelWidth: CGFloat = 280
+    public static let contentMaxWidth: CGFloat = 720
 
-    // MARK: - Colour
+    // MARK: - Colour System (Black / Graphite Dark Theme)
     //
-    // Accent is used sparingly: for the active state and for genuinely
-    // meaningful status. Everything else relies on native separators and
-    // materials so the app does not read as neon or glass-heavy.
+    // Tuned dark graphite layers avoid pure #000000 flatness while creating
+    // quiet, calm depth. Restrained indigo-violet accent is reserved strictly
+    // for active states, selected indicators, and the logo mark.
 
-    public static let accent = Color.accentColor
+    public static let accent = Color(red: 0.44, green: 0.40, blue: 0.90)
 
-    public static var separator: Color {
-        Color(nsColor: .separatorColor)
-    }
+    public static let windowBackground = Color(red: 0.094, green: 0.094, blue: 0.094) // #181818
+    public static let sidebarBackground = Color(red: 0.082, green: 0.082, blue: 0.082) // #151515
+    public static let contentBackground = Color(red: 0.094, green: 0.094, blue: 0.094) // #181818
+    public static let surface = Color(red: 0.118, green: 0.118, blue: 0.118) // #1E1E1E
+    public static let surfaceElevated = Color(red: 0.133, green: 0.133, blue: 0.133) // #222222
+    public static let composerBackground = Color(red: 0.125, green: 0.125, blue: 0.125) // #202020
 
-    public static var surface: Color {
-        Color(nsColor: .controlBackgroundColor)
-    }
+    public static let primaryText = Color(white: 0.93)
+    public static let secondaryText = Color(white: 0.60)
+    public static let tertiaryText = Color(white: 0.38)
 
-    public static var subtleFill: Color {
-        Color(nsColor: .quaternaryLabelColor)
-    }
+    public static let borderSubtle = Color.white.opacity(0.065)
+    public static let borderMedium = Color.white.opacity(0.10)
+    public static let separator = Color.white.opacity(0.06)
 
-    public static var composerBackground: Color {
-        Color(nsColor: .controlBackgroundColor)
-    }
+    public static let subtleFill = Color.white.opacity(0.04)
+    public static let hoverFill = Color.white.opacity(0.05)
+    public static let selectedFill = Color.white.opacity(0.085)
 
-    public static var chatBackground: Color {
-        Color(nsColor: .textBackgroundColor)
-    }
+    public static var chatBackground: Color { contentBackground }
 
-    public static var userBubbleBackground: Color {
-        Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
-            let match = appearance.bestMatch(from: [.darkAqua, .aqua])
-            return match == .darkAqua ? NSColor(white: 0.28, alpha: 1.0) : NSColor(white: 0.90, alpha: 1.0)
-        }))
-    }
-
-    public static var userBubbleBorder: Color {
-        Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
-            let match = appearance.bestMatch(from: [.darkAqua, .aqua])
-            return match == .darkAqua ? NSColor(white: 0.38, alpha: 0.8) : NSColor(white: 0.78, alpha: 0.8)
-        }))
-    }
+    public static let userBubbleBackground = Color(red: 0.141, green: 0.141, blue: 0.141) // #242424
+    public static let userBubbleBorder = Color.white.opacity(0.075)
 
     public static func color(for status: TaskStatus) -> Color {
         switch status {
-        case .completed: return .green
-        case .failed: return .red
-        case .cancelled: return .secondary
-        case .requiresForeground: return .orange
-        case .waiting, .queued, .planning, .executing, .pending, .inProgress: return .accentColor
+        case .completed: return Color(red: 0.35, green: 0.78, blue: 0.48)
+        case .failed: return Color(red: 0.92, green: 0.36, blue: 0.34)
+        case .cancelled: return secondaryText
+        case .requiresForeground: return Color(red: 0.95, green: 0.65, blue: 0.25)
+        case .waiting, .queued, .planning, .executing, .pending, .inProgress: return accent
         }
     }
 
     public static func color(for step: TaskStep) -> Color {
         switch step.state {
-        case .completed: return .green
-        case .failed: return .red
-        case .cancelled: return .secondary
-        case .running: return .accentColor
-        case .pending, .skipped: return .secondary
+        case .completed: return Color(red: 0.35, green: 0.78, blue: 0.48)
+        case .failed: return Color(red: 0.92, green: 0.36, blue: 0.34)
+        case .cancelled: return secondaryText
+        case .running: return accent
+        case .pending, .skipped: return secondaryText
         }
     }
 
@@ -128,10 +126,10 @@ public enum LoflyTheme {
 
     public static func color(for activity: ActivityStatus) -> Color {
         switch activity {
-        case .success: return .green
-        case .failure: return .red
-        case .cancelled: return .secondary
-        case .simulated: return .orange
+        case .success: return Color(red: 0.35, green: 0.78, blue: 0.48)
+        case .failure: return Color(red: 0.92, green: 0.36, blue: 0.34)
+        case .cancelled: return secondaryText
+        case .simulated: return Color(red: 0.95, green: 0.65, blue: 0.25)
         }
     }
 
@@ -146,11 +144,11 @@ public enum LoflyTheme {
 
     public static func color(for integration: IntegrationStatus) -> Color {
         switch integration {
-        case .connected: return .green
-        case .notConnected: return .secondary
-        case .needsAuthentication: return .orange
-        case .needsPermission: return .orange
-        case .error: return .red
+        case .connected: return Color(red: 0.35, green: 0.78, blue: 0.48)
+        case .notConnected: return secondaryText
+        case .needsAuthentication: return Color(red: 0.95, green: 0.65, blue: 0.25)
+        case .needsPermission: return Color(red: 0.95, green: 0.65, blue: 0.25)
+        case .error: return Color(red: 0.92, green: 0.36, blue: 0.34)
         }
     }
 
@@ -158,19 +156,17 @@ public enum LoflyTheme {
         switch integration {
         case .connected: return "Connected"
         case .notConnected: return "Not Connected"
-        case .needsAuthentication: return "Needs Authentication"
+        case .needsAuthentication: return "Needs Auth"
         case .needsPermission: return "Needs Permission"
         case .error: return "Error"
         }
     }
 
-    /// Skill permission uses the same colour vocabulary the rest of the app
-    /// already uses: neutral, then needs-attention, then destructive.
     public static func color(for permission: SkillPermissionLevel) -> Color {
         switch permission {
-        case .safe: return .secondary
-        case .sensitive: return .orange
-        case .dangerous: return .red
+        case .safe: return secondaryText
+        case .sensitive: return Color(red: 0.95, green: 0.65, blue: 0.25)
+        case .dangerous: return Color(red: 0.92, green: 0.36, blue: 0.34)
         }
     }
 
@@ -203,7 +199,7 @@ public struct LoflySeparator: View {
     }
 }
 
-/// Section heading used across the secondary screens.
+/// Section heading used across the app (Recents, Integrations, etc.)
 public struct LoflySectionHeader: View {
     private let title: String
 
@@ -213,10 +209,10 @@ public struct LoflySectionHeader: View {
 
     public var body: some View {
         Text(title.uppercased())
-            .font(LoflyTheme.label(LoflyTheme.Size.caption))
-            .foregroundStyle(.secondary)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(LoflyTheme.tertiaryText)
             .textCase(.uppercase)
-            .kerning(0.4)
+            .kerning(0.6)
     }
 }
 
@@ -256,10 +252,10 @@ public struct LoflySoonBadge: View {
     public var body: some View {
         Text("Soon")
             .font(LoflyTheme.label(LoflyTheme.Size.caption))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(LoflyTheme.secondaryText)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(.quaternary, in: Capsule())
+            .background(LoflyTheme.subtleFill, in: Capsule())
             .accessibilityLabel("Coming soon")
     }
 }
@@ -275,32 +271,31 @@ public struct LoflySidebarSearchField: View {
     public var body: some View {
         HStack(spacing: LoflyTheme.Space.xs) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: LoflyTheme.Size.caption))
-                .foregroundStyle(.tertiary)
-            TextField("Search chats", text: $text)
+                .font(.system(size: 12))
+                .foregroundStyle(LoflyTheme.tertiaryText)
+            TextField("Search chats...", text: $text)
                 .textFieldStyle(.plain)
-                .font(LoflyTheme.body(LoflyTheme.Size.callout))
+                .font(LoflyTheme.body(12.5))
+                .foregroundStyle(LoflyTheme.primaryText)
                 .accessibilityLabel("Search chats")
             if !text.isEmpty {
                 Button {
                     text = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: LoflyTheme.Size.caption))
-                        .foregroundStyle(.tertiary)
+                        .font(.system(size: 11))
+                        .foregroundStyle(LoflyTheme.tertiaryText)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear search")
             }
         }
-        .padding(.horizontal, LoflyTheme.Space.s)
+        .padding(.horizontal, 8)
         .padding(.vertical, 5)
         .background(
             RoundedRectangle(cornerRadius: LoflyTheme.Radius.small, style: .continuous)
-                .fill(LoflyTheme.subtleFill.opacity(0.4))
+                .fill(LoflyTheme.subtleFill)
         )
-        .padding(.horizontal, LoflyTheme.Space.m)
-        .padding(.top, LoflyTheme.Space.xs)
     }
 }
 
@@ -313,19 +308,14 @@ public struct LoflySidebarHeader: View {
     }
 
     public var body: some View {
-        Text(title)
-            .font(LoflyTheme.label(LoflyTheme.Size.caption))
-            .foregroundStyle(.secondary)
+        Text(title.uppercased())
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(LoflyTheme.tertiaryText)
+            .kerning(0.5)
     }
 }
 
 /// One sidebar row, shared by every navigation item and every history entry.
-///
-/// Geometry, hover and selection live here so the rows cannot drift apart:
-/// a sidebar whose rows disagree about padding reads as assembled by hand.
-/// Rows without a symbol start their text at the icon column's left edge,
-/// which is why history titles line up with the nav symbols rather than the
-/// nav labels.
 public struct LoflySidebarRow<Content: View>: View {
     private let title: String
     private let symbol: String?
@@ -351,25 +341,25 @@ public struct LoflySidebarRow<Content: View>: View {
 
     public var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 if let symbol {
                     Image(systemName: symbol)
-                        .font(.system(size: 14))
+                        .font(.system(size: 13.5))
                         .frame(width: 18)
-                        .foregroundStyle(isSelected ? LoflyTheme.accent : Color.secondary)
+                        .foregroundStyle(isSelected ? LoflyTheme.accent : LoflyTheme.secondaryText)
                 }
                 Text(title)
-                    .font(.system(size: 13.5, weight: isSelected ? .medium : .regular))
-                    .foregroundStyle(isSelected ? Color.primary : Color.primary.opacity(0.88))
+                    .font(.system(size: 13, weight: isSelected ? .medium : .regular))
+                    .foregroundStyle(isSelected ? LoflyTheme.primaryText : LoflyTheme.secondaryText.opacity(0.95))
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Spacer(minLength: 4)
                 content
             }
-            .padding(.horizontal, 10)
-            .frame(height: symbol != nil ? 36 : 34)
+            .padding(.horizontal, 8)
+            .frame(height: 32)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: LoflyTheme.Radius.medium, style: .continuous)
                     .fill(background)
             )
             .contentShape(Rectangle())
@@ -379,10 +369,10 @@ public struct LoflySidebarRow<Content: View>: View {
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 
-    /// Selection outranks hover, matching ChatGPT's neutral elevated pill background.
+    /// Subtle graphite highlight for selected item, no bright blue fill
     private var background: Color {
-        if isSelected { return Color.primary.opacity(0.12) }
-        if isHovering { return Color.primary.opacity(0.06) }
+        if isSelected { return LoflyTheme.selectedFill }
+        if isHovering { return LoflyTheme.hoverFill }
         return .clear
     }
 }

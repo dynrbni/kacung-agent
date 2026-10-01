@@ -2,11 +2,12 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-/// Chat is the primary desktop surface. Modeled after the modern ChatGPT interface:
-/// - Clean borderless canvas with top bar completely blank
-/// - Centered hero empty state with "What can I help with ?", floating input capsule, and suggestion chips
-/// - Centered transcript stream with polished user bubbles and assistant responses
-/// - Floating bottom composer docked at the bottom center with model selector, tools, and attachments
+/// Chat is the primary desktop surface:
+/// - Minimal, elegant, calm native macOS interface
+/// - Tonal dark graphite layers (#181818 content, #202020 composer, #1E1E1E surfaces)
+/// - Time-aware personal greeting with subtle quick suggestions
+/// - Tactile elevated composer with attachment, model, and voice controls
+/// - Pure editorial transcript with readable typography and real-time streaming
 struct ChatView: View {
     @EnvironmentObject private var store: DesktopStore
     @FocusState private var composerFocused: Bool
@@ -18,7 +19,6 @@ struct ChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Top is completely empty as requested
             if isEmptyState {
                 emptyHeroView
             } else {
@@ -26,8 +26,7 @@ struct ChatView: View {
                 bottomComposerContainer
             }
         }
-        .padding(.top, 10)
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(LoflyTheme.contentBackground)
         .onAppear {
             composerFocused = true
             setupDictationListener()
@@ -48,29 +47,43 @@ struct ChatView: View {
         }
     }
 
-    private var selectedConversation: ConversationSummary? {
-        store.conversations.first { $0.id == store.selectedConversationId }
-    }
+    // MARK: - Empty Hero State
 
-    // MARK: - Empty Hero State (What can I help with ?)
+    private var greetingTitle: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        if hour < 12 { return "Good morning." }
+        if hour < 17 { return "Good afternoon." }
+        return "Good evening."
+    }
 
     private var emptyHeroView: some View {
         VStack(spacing: 0) {
             Spacer()
 
-            VStack(spacing: 24) {
-                Text("What can I help with ?")
-                    .font(.system(size: 32, weight: .semibold, design: .default))
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.center)
+            VStack(spacing: 20) {
+                // Personal & subtle greeting
+                VStack(spacing: 6) {
+                    Text(greetingTitle)
+                        .font(.system(size: 34, weight: .semibold))
+                        .foregroundStyle(LoflyTheme.primaryText)
+                        .multilineTextAlignment(.center)
 
+                    Text("What would you like to get done?")
+                        .font(.system(size: 15.5, weight: .regular))
+                        .foregroundStyle(LoflyTheme.secondaryText)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.bottom, 6)
+
+                // Elevated graphite composer
                 floatingComposerBox
                     .frame(maxWidth: 680)
 
+                // 4 Subtle quick suggestions
                 suggestionChips
                     .frame(maxWidth: 680)
             }
-            .padding(.horizontal, 48)
+            .padding(.horizontal, 36)
 
             Spacer()
             Spacer()
@@ -80,17 +93,17 @@ struct ChatView: View {
 
     private var suggestionChips: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: LoflyTheme.Space.s) {
-                suggestionChip(title: "Bantu buat rencana kerja", icon: "doc.text")
-                suggestionChip(title: "Jelaskan konsep AI", icon: "sparkles")
-                suggestionChip(title: "Tulis email formal", icon: "envelope")
-                suggestionChip(title: "Brainstorming ide", icon: "lightbulb")
+            HStack(spacing: 8) {
+                suggestionChip(title: "Explain something", icon: "sparkles")
+                suggestionChip(title: "Plan something", icon: "calendar.badge.clock")
+                suggestionChip(title: "Write something", icon: "text.alignleft")
+                suggestionChip(title: "Get something done", icon: "terminal")
             }
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: LoflyTheme.Space.s) {
-                suggestionChip(title: "Bantu buat rencana kerja", icon: "doc.text", expand: true)
-                suggestionChip(title: "Jelaskan konsep AI", icon: "sparkles", expand: true)
-                suggestionChip(title: "Tulis email formal", icon: "envelope", expand: true)
-                suggestionChip(title: "Brainstorming ide", icon: "lightbulb", expand: true)
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                suggestionChip(title: "Explain something", icon: "sparkles", expand: true)
+                suggestionChip(title: "Plan something", icon: "calendar.badge.clock", expand: true)
+                suggestionChip(title: "Write something", icon: "text.alignleft", expand: true)
+                suggestionChip(title: "Get something done", icon: "terminal", expand: true)
             }
         }
     }
@@ -103,21 +116,21 @@ struct ChatView: View {
             HStack(spacing: 6) {
                 Image(systemName: icon)
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(LoflyTheme.secondaryText)
                 Text(title)
-                    .font(LoflyTheme.body(LoflyTheme.Size.caption))
-                    .foregroundStyle(.primary)
+                    .font(.system(size: 12.5, weight: .regular))
+                    .foregroundStyle(LoflyTheme.primaryText.opacity(0.92))
             }
             .frame(maxWidth: expand ? .infinity : nil)
-            .padding(.horizontal, LoflyTheme.Space.m)
+            .padding(.horizontal, 12)
             .padding(.vertical, 7)
             .background(
-                RoundedRectangle(cornerRadius: LoflyTheme.Radius.large, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(LoflyTheme.surface)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: LoflyTheme.Radius.large, style: .continuous)
-                    .stroke(LoflyTheme.separator.opacity(0.6), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(LoflyTheme.borderSubtle, lineWidth: 0.5)
             )
             .contentShape(Rectangle())
         }
@@ -129,7 +142,7 @@ struct ChatView: View {
     private var floatingComposerBox: some View {
         VStack(alignment: .leading, spacing: 6) {
             if isRecordingAudio {
-                // Waveform Audio Recording Bar (Speech-To-Text inside App)
+                // Waveform Audio Recording Bar
                 HStack(spacing: 12) {
                     plusAttachmentButton
                         .opacity(0.3)
@@ -138,35 +151,33 @@ struct ChatView: View {
                     AudioWaveformBarView()
                         .frame(maxWidth: .infinity)
 
-                    // Cancel button (✕)
                     Button(action: cancelVoiceRecording) {
                         Image(systemName: "xmark")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 28, height: 28)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(LoflyTheme.secondaryText)
+                            .frame(width: 26, height: 26)
                             .background(
                                 Circle()
-                                    .fill(LoflyTheme.subtleFill.opacity(0.3))
+                                    .fill(LoflyTheme.subtleFill)
                             )
                     }
                     .buttonStyle(.plain)
-                    .help("Batal merekam")
-                    .accessibilityLabel("Batal merekam")
+                    .help("Cancel recording")
+                    .accessibilityLabel("Cancel recording")
 
-                    // Confirm / Accept button (✓)
                     Button(action: confirmVoiceRecording) {
                         Image(systemName: "checkmark")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(Color(nsColor: .windowBackgroundColor))
-                            .frame(width: 28, height: 28)
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(LoflyTheme.windowBackground)
+                            .frame(width: 26, height: 26)
                             .background(
                                 Circle()
-                                    .fill(Color.primary)
+                                    .fill(LoflyTheme.primaryText)
                             )
                     }
                     .buttonStyle(.plain)
-                    .help("Selesai & masukkan teks")
-                    .accessibilityLabel("Selesai & masukkan teks")
+                    .help("Done & insert text")
+                    .accessibilityLabel("Done & insert text")
                 }
                 .frame(minHeight: 38)
                 .padding(.horizontal, 4)
@@ -177,9 +188,10 @@ struct ChatView: View {
                 }
 
                 // 2. Text input area
-                TextField("Ask anything", text: $store.composerText, axis: .vertical)
-                    .font(LoflyTheme.body(14))
-                    .lineLimit(1...5)
+                TextField("Ask Lofly anything...", text: $store.composerText, axis: .vertical)
+                    .font(.system(size: 14.5, weight: .regular))
+                    .foregroundStyle(LoflyTheme.primaryText)
+                    .lineLimit(1...6)
                     .textFieldStyle(.plain)
                     .focused($composerFocused)
                     .onSubmit {
@@ -194,51 +206,32 @@ struct ChatView: View {
                         return .handled
                     }
                     .frame(minHeight: 28)
-                    .accessibilityLabel("Message Lofly")
+                    .accessibilityLabel("Ask Lofly anything")
 
-                // 3. Bottom action row inside capsule
-                HStack(spacing: LoflyTheme.Space.s) {
-                    // Plus button for image and file attachments
+                // 3. Bottom action controls row
+                HStack(spacing: 8) {
                     plusAttachmentButton
 
-                    // Model & Reasoning Selector: Gemini 3.8 Flash (Low, Medium, High)
                     modelSelectorMenu
-
-                    // Tools pill button
-                    Button {
-                        store.activeSurface = .skills
-                    } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: "slider.horizontal.3")
-                                .font(.system(size: 11, weight: .medium))
-                            Text("Tools")
-                                .font(LoflyTheme.label(LoflyTheme.Size.caption))
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(
-                            Capsule()
-                                .fill(LoflyTheme.subtleFill.opacity(0.25))
-                        )
-                        .foregroundStyle(.primary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("View and manage available tools")
 
                     Spacer()
 
-                    // In-app Speech-to-text mic button
+                    // Voice STT button
                     Button(action: startInAppVoiceRecording) {
                         Image(systemName: "mic")
-                            .font(.system(size: 14))
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 13))
+                            .foregroundStyle(LoflyTheme.secondaryText)
                             .frame(width: 28, height: 28)
+                            .background(
+                                Circle()
+                                    .fill(Color.clear)
+                            )
                     }
                     .buttonStyle(.plain)
-                    .help("Speech to text (Rekam suara)")
+                    .help("Speech to text")
                     .accessibilityLabel("Speech to text")
 
-                    // Send or stop button (ChatGPT style)
+                    // Send or Stop button
                     if store.isStreaming || store.isSending || store.activeTask != nil {
                         Button {
                             if store.isStreaming || store.isSending {
@@ -249,10 +242,10 @@ struct ChatView: View {
                         } label: {
                             ZStack {
                                 Circle()
-                                    .fill(Color.primary)
+                                    .fill(LoflyTheme.primaryText)
                                     .frame(width: 28, height: 28)
                                 RoundedRectangle(cornerRadius: 2)
-                                    .fill(Color(nsColor: .windowBackgroundColor))
+                                    .fill(LoflyTheme.windowBackground)
                                     .frame(width: 10, height: 10)
                             }
                         }
@@ -264,11 +257,11 @@ struct ChatView: View {
                         Button(action: submit) {
                             ZStack {
                                 Circle()
-                                    .fill(canSend ? Color.primary : LoflyTheme.subtleFill.opacity(0.35))
+                                    .fill(canSend ? LoflyTheme.primaryText : LoflyTheme.subtleFill)
                                     .frame(width: 28, height: 28)
                                 Image(systemName: "arrow.up")
-                                    .font(.system(size: 13, weight: .bold))
-                                    .foregroundStyle(canSend ? Color(nsColor: .windowBackgroundColor) : Color.secondary.opacity(0.6))
+                                    .font(.system(size: 12.5, weight: .bold))
+                                    .foregroundStyle(canSend ? LoflyTheme.windowBackground : LoflyTheme.tertiaryText)
                             }
                         }
                         .buttonStyle(.plain)
@@ -279,17 +272,17 @@ struct ChatView: View {
                 }
             }
         }
-        .padding(.horizontal, LoflyTheme.Space.m)
+        .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(
-            RoundedRectangle(cornerRadius: LoflyTheme.Radius.xl, style: .continuous)
+            RoundedRectangle(cornerRadius: LoflyTheme.Radius.composer, style: .continuous)
                 .fill(LoflyTheme.composerBackground)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: LoflyTheme.Radius.xl, style: .continuous)
-                .stroke(LoflyTheme.separator.opacity(0.7), lineWidth: 1)
+            RoundedRectangle(cornerRadius: LoflyTheme.Radius.composer, style: .continuous)
+                .stroke(composerFocused ? LoflyTheme.accent.opacity(0.35) : LoflyTheme.borderMedium, lineWidth: 0.8)
         )
-        .shadow(color: Color.black.opacity(0.04), radius: 10, y: 3)
+        .shadow(color: Color.black.opacity(0.18), radius: 12, y: 4)
     }
 
     // MARK: - Attachments Components & Plus Menu
@@ -307,14 +300,22 @@ struct ChatView: View {
             } label: {
                 Label("Add Files or Documents", systemImage: "doc.text")
             }
+
+            Divider()
+
+            Button {
+                store.activeSurface = .skills
+            } label: {
+                Label("Manage Tools & Skills", systemImage: "slider.horizontal.3")
+            }
         } label: {
             Image(systemName: "plus")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 28, height: 28)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(LoflyTheme.secondaryText)
+                .frame(width: 26, height: 26)
                 .background(
                     Circle()
-                        .fill(LoflyTheme.subtleFill.opacity(0.3))
+                        .fill(LoflyTheme.subtleFill)
                 )
                 .contentShape(Circle())
         }
@@ -335,12 +336,13 @@ struct ChatView: View {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(att.name)
                                 .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(LoflyTheme.primaryText)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                             if !att.fileSize.isEmpty {
                                 Text(att.fileSize)
                                     .font(.system(size: 9))
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(LoflyTheme.secondaryText)
                             }
                         }
                         .frame(maxWidth: 120, alignment: .leading)
@@ -350,20 +352,20 @@ struct ChatView: View {
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(LoflyTheme.tertiaryText)
                         }
                         .buttonStyle(.plain)
-                        .help("Hapus lampiran")
+                        .help("Remove attachment")
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 5)
                     .background(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(LoflyTheme.subtleFill.opacity(0.3))
+                            .fill(LoflyTheme.surface)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(LoflyTheme.separator.opacity(0.5), lineWidth: 0.5)
+                            .stroke(LoflyTheme.borderSubtle, lineWidth: 0.5)
                     )
                 }
             }
@@ -384,10 +386,10 @@ struct ChatView: View {
             if let webp = UTType(filenameExtension: "webp") { imageTypes.append(webp) }
             if let heic = UTType(filenameExtension: "heic") { imageTypes.append(heic) }
             panel.allowedContentTypes = imageTypes
-            panel.message = "Pilih gambar untuk dilampirkan"
+            panel.message = "Choose image to attach"
         } else {
             panel.allowedContentTypes = [.item, .content, .data, .pdf, .text, .plainText]
-            panel.message = "Pilih file atau dokumen untuk dilampirkan"
+            panel.message = "Choose document to attach"
         }
 
         if panel.runModal() == .OK {
@@ -447,23 +449,23 @@ struct ChatView: View {
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "sparkle")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 9.5, weight: .semibold))
                     .foregroundStyle(LoflyTheme.accent)
                 Text("Gemini 3.8 Flash")
-                    .font(LoflyTheme.label(11))
-                    .foregroundStyle(.primary)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(LoflyTheme.primaryText)
                 Text("· \(store.reasoningLevel.capitalized)")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 10, weight: .regular))
+                    .foregroundStyle(LoflyTheme.tertiaryText)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 7, weight: .bold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(LoflyTheme.tertiaryText)
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 5)
+            .padding(.vertical, 4)
             .background(
-                Capsule()
-                    .fill(LoflyTheme.subtleFill.opacity(0.25))
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(LoflyTheme.subtleFill)
             )
             .contentShape(Rectangle())
         }
@@ -507,7 +509,7 @@ struct ChatView: View {
     private var transcript: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: LoflyTheme.Space.l) {
+                LazyVStack(alignment: .leading, spacing: 20) {
                     ForEach(store.messages) { message in
                         MessageRow(message: message)
                             .id(message.id)
@@ -526,9 +528,9 @@ struct ChatView: View {
 
                     Color.clear.frame(height: 1).id("bottom")
                 }
-                .padding(.horizontal, 48)
-                .padding(.vertical, LoflyTheme.Space.m)
-                .frame(maxWidth: 680, alignment: .leading)
+                .padding(.horizontal, 36)
+                .padding(.vertical, 16)
+                .frame(maxWidth: LoflyTheme.contentMaxWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
             }
             .onChange(of: store.scrollTrigger) { _ in
@@ -549,16 +551,16 @@ struct ChatView: View {
     private var bottomComposerContainer: some View {
         VStack(spacing: 6) {
             floatingComposerBox
-                .frame(maxWidth: 680)
+                .frame(maxWidth: LoflyTheme.contentMaxWidth)
 
             Text("Lofly can make mistakes. Verify important info.")
-                .font(LoflyTheme.caption(10))
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 10.5))
+                .foregroundStyle(LoflyTheme.tertiaryText)
         }
-        .padding(.horizontal, 48)
-        .padding(.bottom, LoflyTheme.Space.s)
+        .padding(.horizontal, 36)
+        .padding(.bottom, 10)
         .padding(.top, 4)
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(LoflyTheme.contentBackground)
     }
 
     private func submit() {
@@ -569,7 +571,7 @@ struct ChatView: View {
     }
 }
 
-// MARK: - Message Row (Clean ChatGPT Style)
+// MARK: - Message Row (Clean Editorial Assistant + Minimal User Bubble)
 
 struct MessageRow: View {
     @EnvironmentObject private var store: DesktopStore
@@ -589,56 +591,54 @@ struct MessageRow: View {
 
             VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 8) {
                 if message.role == .assistant && message.text.isEmpty {
-                    // Only show inline thinking if there isn't an active task already showing it
                     if store.activeTask == nil {
                         HStack(spacing: 8) {
                             ProgressView()
                                 .controlSize(.small)
                             Text("Thinking...")
                                 .font(LoflyTheme.body(13))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(LoflyTheme.secondaryText)
                         }
                         .padding(.vertical, 4)
                     }
                 } else if message.role == .assistant {
-                    // Assistant response: rendered with rich markdown typography and real-time streaming caret
+                    // Assistant response: rendered as pure editorial text with rich markdown
                     RichMarkdownView(text: message.text, isStreaming: isMessageStreaming)
                         .contentShape(Rectangle())
 
-                    // ChatGPT-style Action Bar below AI Output (hidden while streaming)
+                    // Quiet action bar below AI output
                     if !isMessageStreaming && !message.text.isEmpty {
                         assistantActionBar
                     }
                 } else {
-                    // User Message Bubble
+                    // User message bubble: minimal, calm, graphite elevated surface
                     Text(MarkdownParser.inlineAttributedString(message.text))
                         .font(.system(size: 14.5, weight: .regular))
-                        .lineSpacing(5)
+                        .lineSpacing(4.5)
+                        .foregroundStyle(LoflyTheme.primaryText)
                         .textSelection(.enabled)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 11)
+                        .padding(.horizontal, 15)
+                        .padding(.vertical, 10)
                         .background(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
                                 .fill(LoflyTheme.userBubbleBackground)
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
                                         .stroke(LoflyTheme.userBubbleBorder, lineWidth: 0.5)
-                                    )
+                                )
                         )
                 }
 
                 if let error = message.error, !error.isEmpty {
                     Label(error, systemImage: "exclamationmark.triangle")
-                        .font(LoflyTheme.caption(LoflyTheme.Size.caption))
-                        .foregroundStyle(.orange)
+                        .font(LoflyTheme.caption(11))
+                        .foregroundStyle(Color.orange)
                         .padding(.top, 4)
                 }
             }
-            .frame(maxWidth: message.role == .user ? 560 : .infinity, alignment: message.role == .user ? .trailing : .leading)
+            .frame(maxWidth: message.role == .user ? 540 : .infinity, alignment: message.role == .user ? .trailing : .leading)
 
-            if message.role == .user {
-                // User bubble is right-aligned
-            } else {
+            if message.role != .user {
                 Spacer(minLength: 32)
             }
         }
@@ -647,13 +647,12 @@ struct MessageRow: View {
         .accessibilityLabel("\(message.role == .user ? "You" : "Assistant") said: \(message.text)")
     }
 
-    // MARK: - Action Toolbar (Copy, Thumbs Up / Down Rate Response, Regenerate, Share)
+    // MARK: - Action Toolbar (Copy, Thumbs Up / Down Rate Response, Regenerate)
 
     private var assistantActionBar: some View {
         let currentRating = store.messageRatings[message.id]
 
-        return HStack(spacing: 6) {
-            // 1. Copy text button
+        return HStack(spacing: 4) {
             Button {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(message.text, forType: .string)
@@ -664,87 +663,63 @@ struct MessageRow: View {
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 12))
+                        .font(.system(size: 11))
                     if didCopy {
                         Text("Copied")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 10.5, weight: .medium))
                     }
                 }
-                .foregroundStyle(didCopy ? LoflyTheme.accent : Color.secondary.opacity(0.8))
+                .foregroundStyle(didCopy ? LoflyTheme.accent : LoflyTheme.secondaryText)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 4)
                 .background(
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(didCopy ? LoflyTheme.accent.opacity(0.12) : (isHovering ? Color.primary.opacity(0.04) : Color.clear))
+                        .fill(didCopy ? LoflyTheme.accent.opacity(0.12) : (isHovering ? LoflyTheme.subtleFill : Color.clear))
                 )
             }
             .buttonStyle(.plain)
-            .help(didCopy ? "Copied!" : "Salin teks")
+            .help(didCopy ? "Copied" : "Copy text")
 
-            // 2. Thumbs up rate response
             Button {
                 store.toggleRating(for: message.id, rating: .thumbsUp)
             } label: {
                 Image(systemName: currentRating == .thumbsUp ? "hand.thumbsup.fill" : "hand.thumbsup")
-                    .font(.system(size: 12))
-                    .foregroundStyle(currentRating == .thumbsUp ? LoflyTheme.accent : Color.secondary.opacity(0.8))
-                    .padding(6)
+                    .font(.system(size: 11))
+                    .foregroundStyle(currentRating == .thumbsUp ? LoflyTheme.accent : LoflyTheme.secondaryText)
+                    .padding(5)
                     .background(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(currentRating == .thumbsUp ? LoflyTheme.accent.opacity(0.12) : (isHovering ? Color.primary.opacity(0.04) : Color.clear))
+                            .fill(currentRating == .thumbsUp ? LoflyTheme.accent.opacity(0.12) : (isHovering ? LoflyTheme.subtleFill : Color.clear))
                     )
             }
             .buttonStyle(.plain)
-            .help("Bagus")
+            .help("Good response")
 
-            // 3. Thumbs down rate response
             Button {
                 store.toggleRating(for: message.id, rating: .thumbsDown)
             } label: {
                 Image(systemName: currentRating == .thumbsDown ? "hand.thumbsdown.fill" : "hand.thumbsdown")
-                    .font(.system(size: 12))
-                    .foregroundStyle(currentRating == .thumbsDown ? Color.orange : Color.secondary.opacity(0.8))
-                    .padding(6)
+                    .font(.system(size: 11))
+                    .foregroundStyle(currentRating == .thumbsDown ? Color.orange : LoflyTheme.secondaryText)
+                    .padding(5)
                     .background(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(currentRating == .thumbsDown ? Color.orange.opacity(0.12) : (isHovering ? Color.primary.opacity(0.04) : Color.clear))
+                            .fill(currentRating == .thumbsDown ? Color.orange.opacity(0.12) : (isHovering ? LoflyTheme.subtleFill : Color.clear))
                     )
             }
             .buttonStyle(.plain)
-            .help("Kurang bagus")
+            .help("Poor response")
 
-            // 4. Share button
-            Button {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(message.text, forType: .string)
-                didCopy = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                    didCopy = false
-                }
-            } label: {
-                Image(systemName: "square.and.arrow.up")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color.secondary.opacity(0.8))
-                    .padding(6)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(isHovering ? Color.primary.opacity(0.04) : Color.clear)
-                    )
-            }
-            .buttonStyle(.plain)
-            .help("Share")
-
-            // 5. Regenerate button
             Button {
                 store.send()
             } label: {
                 Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color.secondary.opacity(0.8))
-                    .padding(6)
+                    .font(.system(size: 11))
+                    .foregroundStyle(LoflyTheme.secondaryText)
+                    .padding(5)
                     .background(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(isHovering ? Color.primary.opacity(0.04) : Color.clear)
+                            .fill(isHovering ? LoflyTheme.subtleFill : Color.clear)
                     )
             }
             .buttonStyle(.plain)
@@ -753,7 +728,7 @@ struct MessageRow: View {
             Spacer()
         }
         .padding(.top, 4)
-        .opacity(isHovering || didCopy || currentRating != nil ? 1.0 : 0.7)
+        .opacity(isHovering || didCopy || currentRating != nil ? 1.0 : 0.6)
         .animation(.easeInOut(duration: 0.15), value: isHovering)
     }
 }
@@ -765,70 +740,72 @@ struct VoiceSessionCard: View {
     let session: VoiceSession
 
     var body: some View {
-        VStack(alignment: .leading, spacing: LoflyTheme.Space.s) {
-            HStack(spacing: LoflyTheme.Space.s) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
                 Image(systemName: "mic.fill")
-                    .font(.system(size: LoflyTheme.Size.caption))
-                    .foregroundStyle(session.isRunning ? .red : .secondary)
-                LoflySectionHeader(session.isRunning ? "Voice session" : "Voice")
+                    .font(.system(size: 11))
+                    .foregroundStyle(session.isRunning ? Color.red : LoflyTheme.secondaryText)
+                Text(session.isRunning ? "Voice session" : "Voice")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(LoflyTheme.tertiaryText)
+                    .textCase(.uppercase)
                 if !session.isRunning {
-                    Spacer(minLength: LoflyTheme.Space.xs)
+                    Spacer(minLength: 4)
                     Button {
                         store.dismissVoiceSession()
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.system(size: LoflyTheme.Size.caption))
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 11))
+                            .foregroundStyle(LoflyTheme.secondaryText)
                     }
                     .buttonStyle(.borderless)
                     .help("Dismiss")
-                    .accessibilityLabel("Dismiss voice session")
                 }
             }
 
             if !session.transcript.isEmpty {
                 Text(session.transcript)
-                    .font(LoflyTheme.body(LoflyTheme.Size.body))
+                    .font(.system(size: 14))
+                    .foregroundStyle(LoflyTheme.primaryText)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             if session.isRunning {
-                HStack(spacing: LoflyTheme.Space.s) {
+                HStack(spacing: 8) {
                     ProgressView()
                         .controlSize(.small)
                     Text("Listening…")
-                        .font(LoflyTheme.caption(LoflyTheme.Size.caption))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11))
+                        .foregroundStyle(LoflyTheme.secondaryText)
                 }
             }
 
             if let response = session.responseText {
                 RichMarkdownView(text: response)
-                    .padding(LoflyTheme.Space.m)
+                    .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
                         RoundedRectangle(cornerRadius: LoflyTheme.Radius.medium, style: .continuous)
-                            .fill(LoflyTheme.accent.opacity(0.08))
+                            .fill(LoflyTheme.surface)
                     )
             }
 
             if let error = session.errorMessage, !error.isEmpty {
                 Label(error, systemImage: "exclamationmark.triangle")
-                    .font(LoflyTheme.caption(LoflyTheme.Size.caption))
-                    .foregroundStyle(.orange)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.orange)
             }
         }
-        .padding(LoflyTheme.Space.m)
+        .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: LoflyTheme.Radius.large, style: .continuous)
+            RoundedRectangle(cornerRadius: LoflyTheme.Radius.medium, style: .continuous)
                 .fill(LoflyTheme.surface)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: LoflyTheme.Radius.large, style: .continuous)
-                .stroke(LoflyTheme.separator, lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: LoflyTheme.Radius.medium, style: .continuous)
+                .stroke(LoflyTheme.borderSubtle, lineWidth: 0.5)
         )
-        .accessibilityElement(children: .combine)
     }
 }
 
@@ -855,8 +832,8 @@ struct TaskStrip: View {
             ProgressView()
                 .controlSize(.small)
             Text(statusText)
-                .font(LoflyTheme.body(13))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 13))
+                .foregroundStyle(LoflyTheme.secondaryText)
             Spacer()
         }
         .padding(.vertical, 6)

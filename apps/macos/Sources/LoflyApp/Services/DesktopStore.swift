@@ -280,6 +280,7 @@ public final class DesktopStore: ObservableObject {
         messages = []
         composerText = ""
         attachments = []
+        voiceSession = nil
         activeSurface = .chat
         client.resetConversation()
         if pushHistory {

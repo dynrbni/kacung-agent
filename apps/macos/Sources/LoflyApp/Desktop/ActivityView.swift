@@ -122,16 +122,16 @@ private struct ActivityRow: View {
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: LoflyTheme.Space.s) {
                     Text(entry.label)
-                        .font(LoflyTheme.body(LoflyTheme.Size.body))
-                    // A dry run gets its own badge so it is never read as done.
+                        .font(.system(size: 13.5, weight: .medium))
+                        .foregroundStyle(LoflyTheme.primaryText)
                     if entry.dryRun {
                         LoflyStatusPill(text: "Dry Run", color: .orange, symbol: "shield.lefthalf.filled")
                     }
                 }
                 if let detail = entry.detail, !detail.isEmpty {
                     Text(detail)
-                        .font(LoflyTheme.caption(LoflyTheme.Size.caption))
-                        .foregroundStyle(.secondary)
+                        .font(LoflyTheme.caption(11))
+                        .foregroundStyle(LoflyTheme.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -139,8 +139,8 @@ private struct ActivityRow: View {
             Spacer(minLength: LoflyTheme.Space.s)
 
             Text(LoflyDate.clock(milliseconds: entry.timestamp))
-                .font(LoflyTheme.caption(LoflyTheme.Size.caption))
-                .foregroundStyle(.secondary)
+                .font(LoflyTheme.caption(11))
+                .foregroundStyle(LoflyTheme.tertiaryText)
         }
         .padding(.vertical, LoflyTheme.Space.xs)
         .accessibilityElement(children: .combine)

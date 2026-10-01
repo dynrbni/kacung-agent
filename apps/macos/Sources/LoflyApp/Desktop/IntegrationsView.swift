@@ -88,11 +88,12 @@ struct IntegrationRow: View {
         HStack(alignment: .top, spacing: LoflyTheme.Space.m) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.name)
-                    .font(LoflyTheme.body(LoflyTheme.Size.body))
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(LoflyTheme.primaryText)
                 if let detail = item.detail, !detail.isEmpty {
                     Text(detail)
-                        .font(LoflyTheme.caption(LoflyTheme.Size.caption))
-                        .foregroundStyle(.secondary)
+                        .font(LoflyTheme.caption(11))
+                        .foregroundStyle(LoflyTheme.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -109,7 +110,7 @@ struct IntegrationRow: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: LoflyTheme.Radius.medium, style: .continuous)
-                .stroke(LoflyTheme.separator, lineWidth: 0.5)
+                .stroke(LoflyTheme.borderSubtle, lineWidth: 0.5)
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(item.name): \(LoflyTheme.label(for: item.status))")
@@ -170,15 +171,16 @@ struct PermissionsList: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(LoflyTheme.body(LoflyTheme.Size.body))
+                    .font(.system(size: 13.5, weight: .medium))
+                    .foregroundStyle(LoflyTheme.primaryText)
                 Text(detail)
-                    .font(LoflyTheme.caption(LoflyTheme.Size.caption))
-                    .foregroundStyle(.secondary)
+                    .font(LoflyTheme.caption(11.5))
+                    .foregroundStyle(LoflyTheme.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
                 if !granted {
                     Text(canRequest ? "If macOS asks, choose Allow. To change it later, open System Settings." : "Grant Accessibility to enable app automation.")
-                        .font(LoflyTheme.caption(LoflyTheme.Size.caption))
-                        .foregroundStyle(.tertiary)
+                        .font(LoflyTheme.caption(11))
+                        .foregroundStyle(LoflyTheme.tertiaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -214,7 +216,7 @@ struct PermissionsList: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: LoflyTheme.Radius.medium, style: .continuous)
-                .stroke(LoflyTheme.separator, lineWidth: 0.5)
+                .stroke(LoflyTheme.borderSubtle, lineWidth: 0.5)
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title): \(granted ? "granted" : "not granted")")
